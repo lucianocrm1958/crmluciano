@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
 import { Loader2, Trash2, Search, UserPlus, X } from "lucide-react";
 
 export default function FollowUpForm({ followUp, presetContact, onClose, onSaved, onDeleted }) {
+  const { operators } = useSettings();
   const isEdit = !!followUp;
 
   const [selectedContact, setSelectedContact] = useState(
@@ -20,6 +22,7 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
   const [dueDate, setDueDate] = useState(followUp?.due_date || new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState(followUp?.note || "");
   const [status, setStatus] = useState(followUp?.status || "aperto");
+  const [operatorId, setOperatorId] = useState(followUp?.operator_id || "");
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -89,6 +92,7 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
       due_date: dueDate,
       note: note.trim(),
       status,
+      operator_id: operatorId || null,
     };
 
     try {
@@ -211,6 +215,18 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
+        </label>
+
+        <label className="block">
+          <span className="block text-xs font-medium text-slate-500 mb-1">Operatore</span>
+          <select className="input" value={operatorId} onChange={(e) => setOperatorId(e.target.value)}>
+            <option value="">—</option>
+            {operators.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.initials} {o.name ? `· ${o.name}` : ""}
+              </option>
+            ))}
+          </select>
         </label>
 
         {isEdit && (
