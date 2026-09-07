@@ -19,7 +19,7 @@ const STATUS_COLORS = {
 };
 
 export default function Appuntamenti() {
-  const [view, setView] = useState("settimana"); // settimana | lista
+  const [view, setView] = useState("settimana");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +36,7 @@ export default function Appuntamenti() {
     const { data, error: err } = await supabase
       .from("appointments")
       .select(
-        "id, appointment_date, appointment_time, mode, address, status, outcome_notes, contact_id, contacts(first_name, last_name, company, phone)"
+        "id, appointment_date, appointment_time, mode, address, status, outcome_notes, contact_id, operator_id, contacts(first_name, last_name, company, phone), operators(initials)"
       )
       .order("appointment_date", { ascending: true })
       .order("appointment_time", { ascending: true });
@@ -164,7 +164,12 @@ export default function Appuntamenti() {
                         onClick={() => openEdit(a)}
                         className={`w-full text-left rounded-md px-2 py-1.5 text-xs ${STATUS_COLORS[a.status]}`}
                       >
-                        <p className="font-medium">{a.appointment_time?.slice(0, 5)}</p>
+                        <p className="font-medium flex items-center justify-between">
+                          <span>{a.appointment_time?.slice(0, 5)}</span>
+                          {a.operators?.initials && (
+                            <span className="text-[9px] bg-white/60 rounded px-1">{a.operators.initials}</span>
+                          )}
+                        </p>
                         <p className="truncate">
                           {a.contacts?.first_name} {a.contacts?.last_name || ""}
                         </p>
@@ -216,9 +221,16 @@ export default function Appuntamenti() {
                       </p>
                     </div>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[a.status]}`}>
-                    {STATUS_LABELS[a.status]}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {a.operators?.initials && (
+                      <span className="w-6 h-6 rounded-full bg-navy-50 text-navy-600 text-[10px] font-bold flex items-center justify-center">
+                        {a.operators.initials}
+                      </span>
+                    )}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[a.status]}`}>
+                      {STATUS_LABELS[a.status]}
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>
