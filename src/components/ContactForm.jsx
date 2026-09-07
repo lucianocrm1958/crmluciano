@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Modal from "./Modal";
+import ContactEmailLog from "./ContactEmailLog";
 import { useSettings } from "../lib/useSettings";
 import { Loader2, Trash2 } from "lucide-react";
 
@@ -248,6 +249,8 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
             onChange={(e) => update("notes", e.target.value)}
           />
         </Field>
+
+        {isEdit && <ContactEmailLog contactId={contact.id} />}
 
         <div className="border-t border-slate-100 pt-4">
           <Field label="Stato trattativa">
