@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSettings } from "../lib/useSettings";
 import SettingsList from "../components/SettingsList";
+import OperatorsList from "../components/OperatorsList";
 import { Loader2 } from "lucide-react";
 
 const TABS = [
@@ -9,6 +10,7 @@ const TABS = [
   { key: "professionalCategories", label: "Categorie professionali", table: "professional_categories" },
   { key: "productLines", label: "Linee di prodotto", table: "product_lines" },
   { key: "lostReasons", label: "Motivi trattativa persa", table: "lost_reasons" },
+  { key: "operators", label: "Operatori", table: "operators", isOperators: true },
 ];
 
 export default function Impostazioni() {
@@ -30,7 +32,7 @@ export default function Impostazioni() {
       <div>
         <h1 className="text-xl font-bold text-navy-700">Impostazioni</h1>
         <p className="text-sm text-slate-500">
-          Modifica fasi, fonti, categorie e prodotti senza bisogno di toccare il codice
+          Modifica fasi, fonti, categorie, prodotti e operatori senza bisogno di toccare il codice
         </p>
       </div>
 
@@ -49,14 +51,18 @@ export default function Impostazioni() {
       </div>
 
       <div className="max-w-xl">
-        <SettingsList
-          key={activeTabConfig.key}
-          table={activeTabConfig.table}
-          items={settings[activeTabConfig.key]}
-          onChange={settings.reload}
-          withColor={!!activeTabConfig.withColor}
-          withOrder={!!activeTabConfig.withOrder}
-        />
+        {activeTabConfig.isOperators ? (
+          <OperatorsList items={settings.operators} onChange={settings.reload} />
+        ) : (
+          <SettingsList
+            key={activeTabConfig.key}
+            table={activeTabConfig.table}
+            items={settings[activeTabConfig.key]}
+            onChange={settings.reload}
+            withColor={!!activeTabConfig.withColor}
+            withOrder={!!activeTabConfig.withOrder}
+          />
+        )}
       </div>
     </div>
   );
