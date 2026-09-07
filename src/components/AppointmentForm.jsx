@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
 import { Loader2, Trash2, Search, UserPlus, X } from "lucide-react";
 
 export default function AppointmentForm({ appointment, presetContact, initialDate, onClose, onSaved, onDeleted }) {
+  const { operators } = useSettings();
   const isEdit = !!appointment;
 
   const [selectedContact, setSelectedContact] = useState(
@@ -28,6 +30,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [address, setAddress] = useState(appointment?.address || "");
   const [status, setStatus] = useState(appointment?.status || "programmato");
   const [outcomeNotes, setOutcomeNotes] = useState(appointment?.outcome_notes || "");
+  const [operatorId, setOperatorId] = useState(appointment?.operator_id || "");
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -101,6 +104,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       address: mode === "presenza" ? address.trim() : null,
       status,
       outcome_notes: outcomeNotes.trim() || null,
+      operator_id: operatorId || null,
       updated_at: new Date().toISOString(),
     };
 
@@ -143,7 +147,6 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
           <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{error}</div>
         )}
 
-        {/* Selezione contatto */}
         <div>
           <span className="block text-xs font-medium text-slate-500 mb-1">Contatto *</span>
           {selectedContact ? (
@@ -292,6 +295,18 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             <option value="svolto">Svolto</option>
             <option value="da_rifissare">Da rifissare</option>
             <option value="non_effettuato">Non effettuato</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="block text-xs font-medium text-slate-500 mb-1">Operatore</span>
+          <select className="input" value={operatorId} onChange={(e) => setOperatorId(e.target.value)}>
+            <option value="">—</option>
+            {operators.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.initials} {o.name ? `· ${o.name}` : ""}
+              </option>
+            ))}
           </select>
         </label>
 
