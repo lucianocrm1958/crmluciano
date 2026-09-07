@@ -18,7 +18,7 @@ export default function FollowUp() {
     setError(null);
     const { data, error: err } = await supabase
       .from("follow_ups")
-      .select("id, due_date, note, status, contact_id, contacts(first_name, last_name, company, email)")
+      .select("id, due_date, note, status, contact_id, operator_id, contacts(first_name, last_name, company, email), operators(initials)")
       .order("due_date", { ascending: true });
     if (err) {
       console.error(err);
@@ -223,6 +223,11 @@ function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail }) {
               <p className="text-sm text-slate-600 truncate">{f.note}</p>
               <p className="text-xs text-slate-400 mt-0.5">{formatDate(f.due_date)}</p>
             </div>
+            {f.operators?.initials && (
+              <span className="w-6 h-6 rounded-full bg-navy-50 text-navy-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                {f.operators.initials}
+              </span>
+            )}
             {f.contacts?.email && f.status === "aperto" && (
               <div className="flex flex-col gap-1">
                 <button
