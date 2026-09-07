@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, Loader2, Phone, Mail, Building2 } from "lucide-react";
+import { Plus, Loader2, Phone, Mail, Building2, Upload } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import ContactForm from "../components/ContactForm";
+import ImportContacts from "../components/ImportContacts";
 import { formatCurrency } from "../lib/format";
 
 export default function Contatti() {
@@ -22,6 +23,7 @@ export default function Contatti() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   async function loadContacts() {
     setLoading(true);
@@ -45,7 +47,6 @@ export default function Contatti() {
     loadContacts();
   }, []);
 
-  // Apre automaticamente un contatto se si arriva dalla ricerca globale (?id=...)
   useEffect(() => {
     const id = searchParams.get("id");
     if (id && contacts.length > 0) {
@@ -103,7 +104,15 @@ export default function Contatti() {
         </button>
       </div>
 
-      {/* Filtri */}
+      <div className="flex justify-end -mt-2">
+        <button
+          onClick={() => setImportOpen(true)}
+          className="flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-700 font-medium"
+        >
+          <Upload size={13} /> Importa da Excel
+        </button>
+      </div>
+
       <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap gap-2">
         <input
           type="text"
@@ -220,6 +229,10 @@ export default function Contatti() {
           onSaved={loadContacts}
           onDeleted={loadContacts}
         />
+      )}
+
+      {importOpen && (
+        <ImportContacts onClose={() => setImportOpen(false)} onImported={loadContacts} />
       )}
     </div>
   );
