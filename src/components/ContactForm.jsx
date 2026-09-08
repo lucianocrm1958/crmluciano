@@ -10,6 +10,7 @@ const emptyForm = {
   last_name: "",
   company: "",
   phone: "",
+  landline_phone: "",
   email: "",
   professional_category_id: "",
   lead_source_id: "",
@@ -31,6 +32,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           last_name: contact.last_name || "",
           company: contact.company || "",
           phone: contact.phone || "",
+          landline_phone: contact.landline_phone || "",
           email: contact.email || "",
           professional_category_id: contact.professional_category_id || "",
           lead_source_id: contact.lead_source_id || "",
@@ -69,6 +71,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
       last_name: form.last_name.trim() || null,
       company: form.company.trim() || null,
       phone: form.phone.trim() || null,
+      landline_phone: form.landline_phone.trim() || null,
       email: form.email.trim() || null,
       professional_category_id: form.professional_category_id || null,
       lead_source_id: form.lead_source_id || null,
@@ -160,15 +163,23 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           <Field label="Telefono">
             <input className="input" value={form.phone} onChange={(e) => update("phone", e.target.value)} />
           </Field>
-          <Field label="Email">
+          <Field label="Telefono fisso">
             <input
-              type="email"
               className="input"
-              value={form.email}
-              onChange={(e) => update("email", e.target.value)}
+              value={form.landline_phone}
+              onChange={(e) => update("landline_phone", e.target.value)}
             />
           </Field>
         </div>
+
+        <Field label="Email">
+          <input
+            type="email"
+            className="input"
+            value={form.email}
+            onChange={(e) => update("email", e.target.value)}
+          />
+        </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Categoria professionale">
@@ -334,3 +345,4 @@ function Field({ label, children }) {
     </label>
   );
 }
+
