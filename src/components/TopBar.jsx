@@ -31,9 +31,9 @@ export default function TopBar({ onMenuClick }) {
       const term = `%${query.trim()}%`;
       const { data, error } = await supabase
         .from("contacts")
-        .select("id, first_name, last_name, company, email, phone")
+        .select("id, first_name, last_name, company, email, phone, landline_phone")
         .or(
-          `first_name.ilike.${term},last_name.ilike.${term},company.ilike.${term},email.ilike.${term},phone.ilike.${term}`
+          `first_name.ilike.${term},last_name.ilike.${term},company.ilike.${term},email.ilike.${term},phone.ilike.${term},landline_phone.ilike.${term}`
         )
         .limit(8);
       if (!error) setResults(data || []);
@@ -99,7 +99,7 @@ export default function TopBar({ onMenuClick }) {
                       {c.first_name} {c.last_name || ""}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {[c.company, c.email, c.phone].filter(Boolean).join(" · ")}
+                      {[c.company, c.email, c.phone, c.landline_phone].filter(Boolean).join(" · ")}
                     </p>
                   </button>
                 ))}
