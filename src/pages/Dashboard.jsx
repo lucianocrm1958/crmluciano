@@ -304,11 +304,11 @@ function splitNuovoRinnovo(contract) {
   if (contract.contract_type === "nuovo") {
     return { nuovo: amount, rinnovo: 0 };
   }
-  return { nuovo: excess, rinnovo: amount };
+  return { nuovo: excess, rinnovo: amount - excess };
 }
 
 function totalContractAmount(contract) {
-  return (Number(contract.amount) || 0) + (Number(contract.excess_new_amount) || 0);
+  return Number(contract.amount) || 0;
 }
 
 function sumNuovoRinnovo(contractsList) {
@@ -323,3 +323,5 @@ function sumNuovoRinnovo(contractsList) {
     { nuovo: 0, rinnovo: 0, totale: 0 }
   );
 }
+
+ 
