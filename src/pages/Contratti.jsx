@@ -38,7 +38,7 @@ export default function Contratti() {
     const amount = Number(c.amount) || 0;
     const excess = Number(c.excess_new_amount) || 0;
     if (c.contract_type === "nuovo") return { nuovo: amount, rinnovo: 0 };
-    return { nuovo: excess, rinnovo: amount };
+    return { nuovo: excess, rinnovo: amount - excess };
   }
 
   const monthlyBreakdown = useMemo(() => {
