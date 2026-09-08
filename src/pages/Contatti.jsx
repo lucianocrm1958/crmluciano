@@ -31,7 +31,7 @@ export default function Contatti() {
     const { data, error: err } = await supabase
       .from("contacts")
       .select(
-        "id, first_name, last_name, company, phone, email, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color)"
+        "id, first_name, last_name, company, phone, landline_phone, email, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color)"
       )
       .order("created_at", { ascending: false });
     if (err) {
@@ -69,7 +69,7 @@ export default function Contatti() {
       if (filterSource && c.lead_source_id !== filterSource) return false;
       if (filterStage && c.pipeline_stage_id !== filterStage) return false;
       if (term) {
-        const haystack = [c.first_name, c.last_name, c.company, c.email, c.phone]
+        const haystack = [c.first_name, c.last_name, c.company, c.email, c.phone, c.landline_phone]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -188,6 +188,11 @@ export default function Contatti() {
                       <Phone size={11} /> {c.phone}
                     </p>
                   )}
+                  {c.landline_phone && (
+                    <p className="flex items-center gap-1">
+                      <Phone size={11} /> {c.landline_phone}
+                    </p>
+                  )}
                   {c.email && (
                     <p className="flex items-center gap-1">
                       <Mail size={11} /> {c.email}
@@ -237,3 +242,4 @@ export default function Contatti() {
     </div>
   );
 }
+
