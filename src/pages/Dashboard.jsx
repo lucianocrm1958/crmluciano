@@ -127,12 +127,14 @@ export default function Dashboard() {
   }, [contracts]);
 
   const productLineChartData = useMemo(() => {
-    return productLines.map((pl) => {
-      const total = contracts
-        .filter((c) => c.product_line_id === pl.id)
-        .reduce((sum, c) => sum + totalContractAmount(c), 0);
-      return { name: pl.name, value: total };
-    }).filter((p) => p.value > 0);
+    return productLines
+      .map((pl) => {
+        const lineContracts = contracts.filter((c) => c.product_line_id === pl.id);
+        const { nuovo } = sumNuovoRinnovo(lineContracts);
+        return { name: pl.name, nuovo };
+      })
+      .filter((p) => p.nuovo > 0)
+      .sort((a, b) => b.nuovo - a.nuovo);
   }, [contracts, productLines]);
 
   const sourcePerformance = useMemo(() => {
@@ -232,17 +234,17 @@ export default function Dashboard() {
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-sm font-semibold text-navy-700 mb-3">Fatturato per linea di prodotto</p>
+          <p className="text-sm font-semibold text-navy-700 mb-3">Fatturato Nuovo per linea di prodotto</p>
           {productLineChartData.length === 0 ? (
-            <EmptyChartState text="Nessun contratto registrato ancora" />
+            <EmptyChartState text="Nessun contratto Nuovo registrato ancora" />
           ) : (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={Math.max(240, productLineChartData.length * 44)}>
               <BarChart data={productLineChartData} layout="vertical" margin={{ left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#EEF1F5" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v) => formatCurrency(v)} />
-                <Bar dataKey="value" fill="#2C4E80" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="nuovo" name="Nuovo" fill="#1F3864" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -307,10 +309,6 @@ function splitNuovoRinnovo(contract) {
   return { nuovo: excess, rinnovo: amount - excess };
 }
 
-function totalContractAmount(contract) {
-  return Number(contract.amount) || 0;
-}
-
 function sumNuovoRinnovo(contractsList) {
   return contractsList.reduce(
     (acc, c) => {
@@ -324,4 +322,3 @@ function sumNuovoRinnovo(contractsList) {
   );
 }
 
- 
