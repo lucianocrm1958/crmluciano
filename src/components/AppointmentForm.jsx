@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
-import { Loader2, Trash2, Search, UserPlus, X } from "lucide-react";
+import { Loader2, Trash2, Search, UserPlus, X, MapPin } from "lucide-react";
 
 export default function AppointmentForm({ appointment, presetContact, initialDate, onClose, onSaved, onDeleted }) {
   const { operators } = useSettings();
@@ -35,6 +35,36 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
+  const [searchingAddress, setSearchingAddress] = useState(false);
+  const [addressFocused, setAddressFocused] = useState(false);
+
+  // Autocomplete indirizzo tramite Nominatim (OpenStreetMap) — gratuito, senza chiave API.
+  useEffect(() => {
+    if (mode !== "presenza" || address.trim().length < 4) {
+      setAddressSuggestions([]);
+      return;
+    }
+    setSearchingAddress(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=5&q=${encodeURIComponent(
+            address.trim()
+          )}`
+        );
+        const results = await res.json();
+        setAddressSuggestions(Array.isArray(results) ? results : []);
+      } catch (err) {
+        console.error(err);
+        setAddressSuggestions([]);
+      } finally {
+        setSearchingAddress(false);
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [address, mode]);
 
   useEffect(() => {
     if (contactSearch.trim().length < 2) {
@@ -282,9 +312,52 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         </label>
 
         {mode === "presenza" && (
-          <label className="block">
+          <label className="block relative">
             <span className="block text-xs font-medium text-slate-500 mb-1">Indirizzo *</span>
-            <input className="input" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <div className="flex gap-2">
+              <input
+                className="input flex-1"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                onFocus={() => setAddressFocused(true)}
+                onBlur={() => setTimeout(() => setAddressFocused(false), 150)}
+                autoComplete="off"
+                placeholder="Via, numero civico, città"
+              />
+              {address.trim() && (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.trim())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Apri su mappa"
+                  className="flex items-center gap-1 px-3 rounded-lg border border-slate-200 text-slate-500 hover:text-navy-600 hover:border-navy-300 text-xs whitespace-nowrap"
+                >
+                  <MapPin size={14} /> Mappa
+                </a>
+              )}
+            </div>
+            {searchingAddress && (
+              <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                <Loader2 size={12} className="animate-spin" /> Ricerca indirizzi...
+              </p>
+            )}
+            {addressFocused && addressSuggestions.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full border border-slate-200 rounded-lg bg-white shadow-lg divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                {addressSuggestions.map((s) => (
+                  <button
+                    type="button"
+                    key={s.place_id}
+                    onClick={() => {
+                      setAddress(s.display_name);
+                      setAddressSuggestions([]);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-navy-50 text-xs text-slate-600"
+                  >
+                    {s.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </label>
         )}
 
@@ -354,3 +427,4 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     </Modal>
   );
 }
+
