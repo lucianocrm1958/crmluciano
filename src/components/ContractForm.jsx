@@ -5,7 +5,7 @@ import Modal from "./Modal";
 import { Loader2, Trash2, Search, UserPlus, X } from "lucide-react";
 
 export default function ContractForm({ contract, presetContact, onClose, onSaved, onDeleted }) {
-  const { productLines, loading: settingsLoading } = useSettings();
+  const { productLines, pipelineStages, loading: settingsLoading } = useSettings();
   const isEdit = !!contract;
 
   const [selectedContact, setSelectedContact] = useState(
@@ -111,6 +111,20 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
         const { error: err } = await supabase.from("contracts").insert(payload);
         if (err) throw err;
       }
+
+      // Registrare un contratto significa che la trattativa è stata vinta: sposta
+      // automaticamente il contatto sulla fase "Chiuso vinto" della pipeline, così
+      // le statistiche (% vinti per canale, ecc.) lo contano senza doverlo spostare
+      // a mano nel Kanban.
+      const wonStage = pipelineStages.find((s) => s.name === "Chiuso vinto");
+      if (wonStage && selectedContact?.id) {
+        const { error: stageErr } = await supabase
+          .from("contacts")
+          .update({ pipeline_stage_id: wonStage.id, updated_at: new Date().toISOString() })
+          .eq("id", selectedContact.id);
+        if (stageErr) console.error(stageErr);
+      }
+
       onSaved?.();
       onClose();
     } catch (err) {
@@ -299,3 +313,4 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
     </Modal>
   );
 }
+
