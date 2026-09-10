@@ -23,6 +23,7 @@ export default function Dashboard() {
   const [allContacts, setAllContacts] = useState([]);
   const [urgentFollowUps, setUrgentFollowUps] = useState([]);
   const [stalePastAppointments, setStalePastAppointments] = useState([]);
+  const [allAppointments, setAllAppointments] = useState([]);
 
   useEffect(() => {
     async function loadDashboard() {
@@ -39,6 +40,7 @@ export default function Dashboard() {
           { data: contactsData, error: contactsErr },
           { data: followUpsData },
           { data: appointmentsData },
+          { data: allAppointmentsData },
         ] = await Promise.all([
           supabase
             .from("contracts")
@@ -61,6 +63,7 @@ export default function Dashboard() {
             .select("id, appointment_date, status, contact_id, contacts(first_name, last_name, company)")
             .eq("status", "programmato")
             .lt("appointment_date", today),
+          supabase.from("appointments").select("id, contact_id, status"),
         ]);
 
         if (contractsErr) throw contractsErr;
@@ -79,6 +82,7 @@ export default function Dashboard() {
         );
         setUrgentFollowUps(followUpsData || []);
         setStalePastAppointments(appointmentsData || []);
+        setAllAppointments(allAppointmentsData || []);
       } catch (err) {
         console.error(err);
         setError(
@@ -138,17 +142,19 @@ export default function Dashboard() {
   }, [contracts, productLines]);
 
   const sourcePerformance = useMemo(() => {
+    const sourceByContactId = new Map(allContacts.map((c) => [c.id, c.lead_source_id]));
     return leadSources.map((src) => {
       const contactsFromSource = allContacts.filter((c) => c.lead_source_id === src.id);
       const won = contactsFromSource.filter((c) => c.pipeline_stages?.name === "Chiuso vinto").length;
+      const appuntamenti = allAppointments.filter((a) => sourceByContactId.get(a.contact_id) === src.id).length;
       return {
         name: src.name,
-        totale: contactsFromSource.length,
+        appuntamenti,
         vinti: won,
         tasso: contactsFromSource.length > 0 ? Math.round((won / contactsFromSource.length) * 100) : 0,
       };
     });
-  }, [allContacts, leadSources]);
+  }, [allContacts, allAppointments, leadSources]);
 
   if (loading) {
     return (
@@ -259,7 +265,7 @@ export default function Dashboard() {
             {sourcePerformance.map((s) => (
               <div key={s.name} className="flex items-center justify-between text-sm py-1.5 border-b border-slate-50 last:border-0">
                 <span className="text-slate-600">{s.name}</span>
-                <span className="text-slate-400 text-xs">{s.totale} contatti</span>
+                <span className="text-slate-400 text-xs">{s.appuntamenti} appuntamenti</span>
                 <span className="font-medium text-navy-700 w-16 text-right">{s.tasso}% vinti</span>
               </div>
             ))}
@@ -321,4 +327,6 @@ function sumNuovoRinnovo(contractsList) {
     { nuovo: 0, rinnovo: 0, totale: 0 }
   );
 }
+
+ 
 
