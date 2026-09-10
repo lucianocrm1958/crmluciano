@@ -27,7 +27,8 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   );
   const [time, setTime] = useState(appointment?.appointment_time?.slice(0, 5) || "09:00");
   const [mode, setMode] = useState(appointment?.mode || "presenza");
-  const [address, setAddress] = useState(appointment?.address || "");
+  const [street, setStreet] = useState(() => splitAddress(appointment?.address).street);
+  const [civico, setCivico] = useState(() => splitAddress(appointment?.address).civico);
   const [status, setStatus] = useState(appointment?.status || "programmato");
   const [outcomeNotes, setOutcomeNotes] = useState(appointment?.outcome_notes || "");
   const [operatorId, setOperatorId] = useState(appointment?.operator_id || "");
@@ -41,8 +42,10 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [addressFocused, setAddressFocused] = useState(false);
 
   // Autocomplete indirizzo tramite Nominatim (OpenStreetMap) — gratuito, senza chiave API.
+  // Cerca solo su via/piazza + città: il numero civico resta sempre un campo separato,
+  // così non viene mai sovrascritto da un suggerimento che non lo contiene.
   useEffect(() => {
-    if (mode !== "presenza" || address.trim().length < 4) {
+    if (mode !== "presenza" || street.trim().length < 4) {
       setAddressSuggestions([]);
       return;
     }
@@ -51,7 +54,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=5&q=${encodeURIComponent(
-            address.trim()
+            street.trim()
           )}`
         );
         const results = await res.json();
@@ -64,7 +67,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [address, mode]);
+  }, [street, mode]);
 
   useEffect(() => {
     if (contactSearch.trim().length < 2) {
@@ -119,7 +122,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       setError("Seleziona o crea un contatto per l'appuntamento.");
       return;
     }
-    if (mode === "presenza" && !address.trim()) {
+    if (mode === "presenza" && !street.trim()) {
       setError("Inserisci l'indirizzo per un appuntamento in presenza.");
       return;
     }
@@ -131,7 +134,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       appointment_date: date,
       appointment_time: time,
       mode,
-      address: mode === "presenza" ? address.trim() : null,
+      address: mode === "presenza" ? combineAddress(street, civico) : null,
       status,
       outcome_notes: outcomeNotes.trim() || null,
       operator_id: operatorId || null,
@@ -312,53 +315,66 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         </label>
 
         {mode === "presenza" && (
-          <label className="block relative">
-            <span className="block text-xs font-medium text-slate-500 mb-1">Indirizzo *</span>
-            <div className="flex gap-2">
+          <div className="grid grid-cols-3 gap-3">
+            <label className="block col-span-2 relative">
+              <span className="block text-xs font-medium text-slate-500 mb-1">Via / Piazza, città *</span>
               <input
-                className="input flex-1"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                className="input"
+                value={street}
+                onChange={(e) => setStreet(e.target.value)}
                 onFocus={() => setAddressFocused(true)}
                 onBlur={() => setTimeout(() => setAddressFocused(false), 150)}
                 autoComplete="off"
-                placeholder="Via, numero civico, città"
+                placeholder="Es. Via Nazionale, Roma"
               />
-              {address.trim() && (
+              {searchingAddress && (
+                <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                  <Loader2 size={12} className="animate-spin" /> Ricerca indirizzi...
+                </p>
+              )}
+              {addressFocused && addressSuggestions.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full border border-slate-200 rounded-lg bg-white shadow-lg divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                  {addressSuggestions.map((s) => (
+                    <button
+                      type="button"
+                      key={s.place_id}
+                      onClick={() => {
+                        setStreet(s.display_name);
+                        setAddressSuggestions([]);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-navy-50 text-xs text-slate-600"
+                    >
+                      {s.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </label>
+            <label className="block">
+              <span className="block text-xs font-medium text-slate-500 mb-1">Numero civico</span>
+              <input
+                className="input"
+                value={civico}
+                onChange={(e) => setCivico(e.target.value)}
+                autoComplete="off"
+                placeholder="Es. 15/A"
+              />
+            </label>
+            {street.trim() && (
+              <div className="col-span-3 -mt-1">
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.trim())}`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    combineAddress(street, civico)
+                  )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="Apri su mappa"
-                  className="flex items-center gap-1 px-3 rounded-lg border border-slate-200 text-slate-500 hover:text-navy-600 hover:border-navy-300 text-xs whitespace-nowrap"
+                  className="inline-flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700 font-medium"
                 >
-                  <MapPin size={14} /> Mappa
+                  <MapPin size={13} /> Apri su mappa
                 </a>
-              )}
-            </div>
-            {searchingAddress && (
-              <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-                <Loader2 size={12} className="animate-spin" /> Ricerca indirizzi...
-              </p>
-            )}
-            {addressFocused && addressSuggestions.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full border border-slate-200 rounded-lg bg-white shadow-lg divide-y divide-slate-100 max-h-48 overflow-y-auto">
-                {addressSuggestions.map((s) => (
-                  <button
-                    type="button"
-                    key={s.place_id}
-                    onClick={() => {
-                      setAddress(s.display_name);
-                      setAddressSuggestions([]);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-navy-50 text-xs text-slate-600"
-                  >
-                    {s.display_name}
-                  </button>
-                ))}
               </div>
             )}
-          </label>
+          </div>
         )}
 
         <label className="block">
@@ -426,5 +442,27 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       </form>
     </Modal>
   );
+}
+
+// Unisce via/piazza e numero civico in un'unica stringa da salvare/aprire su mappa.
+function combineAddress(street, civico) {
+  const s = (street || "").trim();
+  const c = (civico || "").trim();
+  if (!s) return "";
+  return c ? `${s}, ${c}` : s;
+}
+
+// Riconosce, per un appuntamento già salvato, l'eventuale numero civico finale
+// (es. "15", "15/A", "15 bis") e lo separa dal resto dell'indirizzo, per poter
+// precompilare i due campi separati in modifica. Se non lo trova, il civico
+// resta vuoto e l'intera stringa va nel campo via/piazza.
+function splitAddress(fullAddress) {
+  const value = (fullAddress || "").trim();
+  if (!value) return { street: "", civico: "" };
+  const match = value.match(/^(.*?),?\s*(\d+\s*[a-zA-Z]?(?:\s*\/\s*[a-zA-Z0-9]+)?)$/);
+  if (match && match[1].trim()) {
+    return { street: match[1].trim(), civico: match[2].trim() };
+  }
+  return { street: value, civico: "" };
 }
 
