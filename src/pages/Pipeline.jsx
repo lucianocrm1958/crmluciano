@@ -5,6 +5,8 @@ import { useSettings } from "../lib/useSettings";
 import ContactForm from "../components/ContactForm";
 import { formatCurrency } from "../lib/format";
 
+const NO_PRODUCT_LINE_LABEL = "Linea non specificata";
+
 const CLOSED_STAGE_NAMES = ["Chiuso vinto", "Chiuso perso"];
 
 export default function Pipeline() {
@@ -23,7 +25,7 @@ export default function Pipeline() {
     const { data, error: err } = await supabase
       .from("contacts")
       .select(
-        "id, first_name, last_name, company, status, estimated_value, pipeline_stage_id, professional_categories(name)"
+        "id, first_name, last_name, company, status, estimated_value, pipeline_stage_id, estimated_product_line_id, professional_categories(name), product_lines:estimated_product_line_id(name)"
       )
       .eq("status", "attivo")
       .order("created_at", { ascending: false });
@@ -49,6 +51,20 @@ export default function Pipeline() {
     () => contacts.filter((c) => !c.pipeline_stage_id),
     [contacts]
   );
+
+  const productLineBreakdown = useMemo(() => {
+    const map = new Map();
+    contacts.forEach((c) => {
+      const name = c.product_lines?.name || NO_PRODUCT_LINE_LABEL;
+      const value = Number(c.estimated_value) || 0;
+      map.set(name, (map.get(name) || 0) + value);
+    });
+    const total = Array.from(map.values()).reduce((sum, v) => sum + v, 0);
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, value, pct: total > 0 ? Math.round((value / total) * 100) : 0 }))
+      .filter((p) => p.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [contacts]);
 
   function contactsForStage(stageId) {
     return contacts.filter((c) => c.pipeline_stage_id === stageId);
@@ -108,6 +124,28 @@ export default function Pipeline() {
         <p className="text-sm text-slate-500">Trascina i contatti tra le fasi della trattativa</p>
       </div>
 
+      {productLineBreakdown.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <p className="text-sm font-semibold text-navy-700 mb-3">Pipeline per linea di prodotto</p>
+          <div className="space-y-2">
+            {productLineBreakdown.map((p) => (
+              <div key={p.name} className="flex items-center gap-3 text-sm">
+                <span className="w-40 flex-shrink-0 text-slate-600 truncate">{p.name}</span>
+                <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full bg-navy-500 rounded-full"
+                    style={{ width: `${Math.max(p.pct, 3)}%` }}
+                  />
+                </div>
+                <span className="w-24 flex-shrink-0 text-right font-medium text-slate-700">
+                  {formatCurrency(p.value)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {noStageContacts.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg px-4 py-2.5">
           {noStageContacts.length} contatti senza fase assegnata — apri il contatto e assegna una fase pipeline per vederlo qui.
@@ -163,14 +201,21 @@ export default function Pipeline() {
                         <Building2 size={10} /> {c.company}
                       </p>
                     )}
-                    <div className="flex items-center justify-between mt-2">
-                      {c.professional_categories?.name && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-navy-50 text-navy-600 rounded-full">
-                          {c.professional_categories.name}
-                        </span>
-                      )}
+                    <div className="flex items-center justify-between mt-2 gap-2">
+                      <div className="flex items-center flex-wrap gap-1">
+                        {c.professional_categories?.name && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-navy-50 text-navy-600 rounded-full">
+                            {c.professional_categories.name}
+                          </span>
+                        )}
+                        {c.product_lines?.name && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gold-50 text-gold-600 rounded-full">
+                            {c.product_lines.name}
+                          </span>
+                        )}
+                      </div>
                       {c.estimated_value ? (
-                        <span className="text-xs font-medium text-slate-600">
+                        <span className="text-xs font-medium text-slate-600 whitespace-nowrap">
                           {formatCurrency(c.estimated_value)}
                         </span>
                       ) : null}
@@ -197,3 +242,4 @@ export default function Pipeline() {
     </div>
   );
 }
+
