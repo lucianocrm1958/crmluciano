@@ -20,6 +20,7 @@ const emptyForm = {
   estimated_product_line_id: "",
   list_name: "",
   operator_id: "",
+  call_outcome_id: "",
 };
 
 export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
@@ -30,6 +31,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
     productLines,
     lostReasons,
     operators,
+    callOutcomes,
     loading: settingsLoading,
   } = useSettings();
 
@@ -51,6 +53,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           estimated_product_line_id: contact.estimated_product_line_id || "",
           list_name: contact.list_name || "",
           operator_id: contact.operator_id || "",
+          call_outcome_id: contact.call_outcome_id || "",
         }
       : emptyForm
   );
@@ -92,6 +95,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
       estimated_product_line_id: form.estimated_product_line_id || null,
       list_name: form.list_name.trim() || null,
       operator_id: form.operator_id || null,
+      call_outcome_id: form.call_outcome_id || null,
       status,
       lost_reason_id: status === "perso" ? lostReasonId : null,
       lost_date: status === "perso" ? (contact?.lost_date || new Date().toISOString().slice(0, 10)) : null,
@@ -250,6 +254,21 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           </Field>
         </div>
 
+        <Field label="Esito chiamata (es. per la fase Chiamata TMK)">
+          <select
+            className="input"
+            value={form.call_outcome_id}
+            onChange={(e) => update("call_outcome_id", e.target.value)}
+          >
+            <option value="">—</option>
+            {callOutcomes.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+
         <Field label="Fase pipeline">
           <select
             className="input"
@@ -383,5 +402,3 @@ function Field({ label, children }) {
     </label>
   );
 }
-
-
