@@ -13,13 +13,15 @@ const TARGET_FIELDS = [
 ];
 
 export default function ImportContacts({ onClose, onImported }) {
-  const { leadSources, professionalCategories, pipelineStages } = useSettings();
+  const { leadSources, professionalCategories, pipelineStages, operators } = useSettings();
 
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState([]);
   const [rows, setRows] = useState([]);
   const [mapping, setMapping] = useState({});
+  const [listName, setListName] = useState("");
+  const [operatorId, setOperatorId] = useState("");
   const [leadSourceId, setLeadSourceId] = useState("");
   const [professionalCategoryId, setProfessionalCategoryId] = useState("");
   const [pipelineStageId, setPipelineStageId] = useState("");
@@ -100,6 +102,10 @@ export default function ImportContacts({ onClose, onImported }) {
       setError("Seleziona la fonte per questa lista di contatti.");
       return;
     }
+    if (!listName.trim()) {
+      setError("Inserisci il nome della lista.");
+      return;
+    }
     setImporting(true);
     setError(null);
 
@@ -117,6 +123,8 @@ export default function ImportContacts({ onClose, onImported }) {
           lead_source_id: leadSourceId,
           professional_category_id: professionalCategoryId || null,
           pipeline_stage_id: pipelineStageId || null,
+          list_name: listName.trim(),
+          operator_id: operatorId || null,
           status: "attivo",
         };
       })
@@ -213,6 +221,27 @@ export default function ImportContacts({ onClose, onImported }) {
             <p className="text-sm font-semibold text-navy-700 mb-2">Valori comuni per tutta la lista</p>
             <div className="space-y-2">
               <label className="block">
+                <span className="block text-xs font-medium text-slate-500 mb-1">Nome lista *</span>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Es. Webinar 10/09, Fiera Milano..."
+                  value={listName}
+                  onChange={(e) => setListName(e.target.value)}
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-slate-500 mb-1">Operatore (facoltativo)</span>
+                <select className="input" value={operatorId} onChange={(e) => setOperatorId(e.target.value)}>
+                  <option value="">—</option>
+                  {operators.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.initials} {o.name ? `· ${o.name}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
                 <span className="block text-xs font-medium text-slate-500 mb-1">Fonte *</span>
                 <select className="input" value={leadSourceId} onChange={(e) => setLeadSourceId(e.target.value)}>
                   <option value="">Seleziona la fonte della campagna</option>
@@ -294,3 +323,4 @@ export default function ImportContacts({ onClose, onImported }) {
     </Modal>
   );
 }
+
