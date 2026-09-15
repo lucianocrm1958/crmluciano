@@ -5,7 +5,7 @@ import Modal from "./Modal";
 import { Loader2, Trash2, Search, UserPlus, X, MapPin } from "lucide-react";
 
 export default function AppointmentForm({ appointment, presetContact, initialDate, onClose, onSaved, onDeleted }) {
-  const { operators } = useSettings();
+  const { operators, callOutcomes } = useSettings();
   const isEdit = !!appointment;
 
   const [selectedContact, setSelectedContact] = useState(
@@ -32,6 +32,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [status, setStatus] = useState(appointment?.status || "programmato");
   const [outcomeNotes, setOutcomeNotes] = useState(appointment?.outcome_notes || "");
   const [operatorId, setOperatorId] = useState(appointment?.operator_id || "");
+  const [callOutcomeId, setCallOutcomeId] = useState(appointment?.call_outcome_id || "");
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -138,6 +139,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       status,
       outcome_notes: outcomeNotes.trim() || null,
       operator_id: operatorId || null,
+      call_outcome_id: callOutcomeId || null,
       updated_at: new Date().toISOString(),
     };
 
@@ -362,7 +364,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             </label>
             {street.trim() && (
               <div className="col-span-3 -mt-1">
-                <a
+                
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
                     combineAddress(street, civico)
                   )}`}
@@ -386,6 +388,20 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             <option value="non_effettuato">Non effettuato</option>
           </select>
         </label>
+
+        {(status === "non_effettuato" || status === "da_rifissare") && (
+          <label className="block">
+            <span className="block text-xs font-medium text-slate-500 mb-1">Esito chiamata</span>
+            <select className="input" value={callOutcomeId} onChange={(e) => setCallOutcomeId(e.target.value)}>
+              <option value="">—</option>
+              {callOutcomes.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="block">
           <span className="block text-xs font-medium text-slate-500 mb-1">Operatore</span>
@@ -465,4 +481,3 @@ function splitAddress(fullAddress) {
   }
   return { street: value, civico: "" };
 }
-
