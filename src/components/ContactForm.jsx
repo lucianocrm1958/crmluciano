@@ -18,11 +18,20 @@ const emptyForm = {
   notes: "",
   estimated_value: "",
   estimated_product_line_id: "",
+  list_name: "",
+  operator_id: "",
 };
 
 export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
-  const { professionalCategories, leadSources, pipelineStages, productLines, lostReasons, loading: settingsLoading } =
-    useSettings();
+  const {
+    professionalCategories,
+    leadSources,
+    pipelineStages,
+    productLines,
+    lostReasons,
+    operators,
+    loading: settingsLoading,
+  } = useSettings();
 
   const isEdit = !!contact;
   const [form, setForm] = useState(() =>
@@ -40,6 +49,8 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           notes: contact.notes || "",
           estimated_value: contact.estimated_value ?? "",
           estimated_product_line_id: contact.estimated_product_line_id || "",
+          list_name: contact.list_name || "",
+          operator_id: contact.operator_id || "",
         }
       : emptyForm
   );
@@ -79,6 +90,8 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
       notes: form.notes.trim() || null,
       estimated_value: form.estimated_value === "" ? null : Number(form.estimated_value),
       estimated_product_line_id: form.estimated_product_line_id || null,
+      list_name: form.list_name.trim() || null,
+      operator_id: form.operator_id || null,
       status,
       lost_reason_id: status === "perso" ? lostReasonId : null,
       lost_date: status === "perso" ? (contact?.lost_date || new Date().toISOString().slice(0, 10)) : null,
@@ -206,6 +219,31 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
               {leadSources.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Nome lista (facoltativo)">
+            <input
+              className="input"
+              value={form.list_name}
+              onChange={(e) => update("list_name", e.target.value)}
+              placeholder="Es. Webinar 10/09"
+            />
+          </Field>
+          <Field label="Operatore">
+            <select
+              className="input"
+              value={form.operator_id}
+              onChange={(e) => update("operator_id", e.target.value)}
+            >
+              <option value="">—</option>
+              {operators.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.initials} {o.name ? `· ${o.name}` : ""}
                 </option>
               ))}
             </select>
@@ -345,4 +383,5 @@ function Field({ label, children }) {
     </label>
   );
 }
+
 
