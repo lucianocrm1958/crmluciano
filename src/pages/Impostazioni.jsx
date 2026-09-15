@@ -10,6 +10,7 @@ const TABS = [
   { key: "professionalCategories", label: "Categorie professionali", table: "professional_categories" },
   { key: "productLines", label: "Linee di prodotto", table: "product_lines" },
   { key: "lostReasons", label: "Motivi trattativa persa", table: "lost_reasons" },
+  { key: "callOutcomes", label: "Esiti chiamata", table: "call_outcomes" },
   { key: "operators", label: "Operatori", table: "operators", isOperators: true },
 ];
 
