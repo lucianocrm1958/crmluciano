@@ -9,7 +9,7 @@ import { formatCurrency } from "../lib/format";
 
 export default function Contatti() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { professionalCategories, leadSources, pipelineStages } = useSettings();
+  const { professionalCategories, leadSources, pipelineStages, operators } = useSettings();
 
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +20,8 @@ export default function Contatti() {
   const [filterSource, setFilterSource] = useState("");
   const [filterStage, setFilterStage] = useState("");
   const [filterStatus, setFilterStatus] = useState("attivo");
+  const [filterOperator, setFilterOperator] = useState("");
+  const [filterList, setFilterList] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
@@ -31,7 +33,7 @@ export default function Contatti() {
     const { data, error: err } = await supabase
       .from("contacts")
       .select(
-        "id, first_name, last_name, company, phone, landline_phone, email, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color)"
+        "id, first_name, last_name, company, phone, landline_phone, email, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials)"
       )
       .order("created_at", { ascending: false });
     if (err) {
@@ -61,6 +63,11 @@ export default function Contatti() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contacts]);
 
+  const listNames = useMemo(() => {
+    const names = new Set(contacts.map((c) => c.list_name).filter(Boolean));
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [contacts]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return contacts.filter((c) => {
@@ -68,6 +75,8 @@ export default function Contatti() {
       if (filterCategory && c.professional_category_id !== filterCategory) return false;
       if (filterSource && c.lead_source_id !== filterSource) return false;
       if (filterStage && c.pipeline_stage_id !== filterStage) return false;
+      if (filterOperator && c.operator_id !== filterOperator) return false;
+      if (filterList && c.list_name !== filterList) return false;
       if (term) {
         const haystack = [c.first_name, c.last_name, c.company, c.email, c.phone, c.landline_phone]
           .filter(Boolean)
@@ -77,7 +86,7 @@ export default function Contatti() {
       }
       return true;
     });
-  }, [contacts, search, filterCategory, filterSource, filterStage, filterStatus]);
+  }, [contacts, search, filterCategory, filterSource, filterStage, filterStatus, filterOperator, filterList]);
 
   function openNew() {
     setEditingContact(null);
@@ -144,6 +153,22 @@ export default function Contatti() {
           <option value="perso">Persi</option>
           <option value="">Tutti</option>
         </select>
+        <select className="input max-w-[180px]" value={filterOperator} onChange={(e) => setFilterOperator(e.target.value)}>
+          <option value="">Tutti gli operatori</option>
+          {operators.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.initials} {o.name ? `· ${o.name}` : ""}
+            </option>
+          ))}
+        </select>
+        <select className="input max-w-[180px]" value={filterList} onChange={(e) => setFilterList(e.target.value)}>
+          <option value="">Tutte le liste</option>
+          {listNames.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {loading ? (
@@ -179,6 +204,13 @@ export default function Contatti() {
                   {c.company && (
                     <p className="text-xs text-slate-400 flex items-center gap-1">
                       <Building2 size={11} /> {c.company}
+                    </p>
+                  )}
+                  {(c.list_name || c.operators?.initials) && (
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {c.list_name}
+                      {c.list_name && c.operators?.initials ? " · " : ""}
+                      {c.operators?.initials}
                     </p>
                   )}
                 </div>
@@ -242,4 +274,5 @@ export default function Contatti() {
     </div>
   );
 }
+
 
