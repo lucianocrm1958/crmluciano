@@ -8,6 +8,7 @@ import {
   FileSignature,
   Archive,
   Settings,
+  BarChart3,
   X,
 } from "lucide-react";
 
@@ -16,6 +17,7 @@ const navItems = [
   { to: "/contatti", label: "Contatti", icon: Users },
   { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/appuntamenti", label: "Appuntamenti", icon: CalendarDays },
+  { to: "/statistiche", label: "Statistiche", icon: BarChart3 },
   { to: "/follow-up", label: "Follow-up", icon: BellRing },
   { to: "/contratti", label: "Contratti", icon: FileSignature },
   { to: "/archivio", label: "Archivio", icon: Archive },
