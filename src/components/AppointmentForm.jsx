@@ -5,7 +5,7 @@ import Modal from "./Modal";
 import { Loader2, Trash2, Search, UserPlus, X, MapPin } from "lucide-react";
 
 export default function AppointmentForm({ appointment, presetContact, initialDate, onClose, onSaved, onDeleted }) {
-  const { operators, callOutcomes } = useSettings();
+  const { operators, callOutcomes, productLines } = useSettings();
   const isEdit = !!appointment;
 
   const [selectedContact, setSelectedContact] = useState(
@@ -33,6 +33,9 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [outcomeNotes, setOutcomeNotes] = useState(appointment?.outcome_notes || "");
   const [operatorId, setOperatorId] = useState(appointment?.operator_id || "");
   const [callOutcomeId, setCallOutcomeId] = useState(appointment?.call_outcome_id || "");
+  const [result, setResult] = useState(appointment?.result || "");
+  const [resultAmount, setResultAmount] = useState(appointment?.result_amount ?? "");
+  const [resultProductLineId, setResultProductLineId] = useState(appointment?.result_product_line_id || "");
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -139,7 +142,10 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       status,
       outcome_notes: outcomeNotes.trim() || null,
       operator_id: operatorId || null,
-      call_outcome_id: callOutcomeId || null,
+      call_outcome_id: status === "svolto" ? null : callOutcomeId || null,
+      result: status === "svolto" ? result || null : null,
+      result_amount: status === "svolto" && result === "positivo" && resultAmount !== "" ? Number(resultAmount) : null,
+      result_product_line_id: status === "svolto" && result === "positivo" ? resultProductLineId || null : null,
       updated_at: new Date().toISOString(),
     };
 
@@ -401,6 +407,50 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
               ))}
             </select>
           </label>
+        )}
+
+        {status === "svolto" && (
+          <div className="border border-slate-200 rounded-lg p-3 space-y-3">
+            <label className="block">
+              <span className="block text-xs font-medium text-slate-500 mb-1">Esito appuntamento</span>
+              <select className="input" value={result} onChange={(e) => setResult(e.target.value)}>
+                <option value="">—</option>
+                <option value="positivo">Positivo</option>
+                <option value="negativo">Negativo</option>
+                <option value="pending">Pending</option>
+              </select>
+            </label>
+
+            {result === "positivo" && (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="block text-xs font-medium text-slate-500 mb-1">Importo (€)</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input"
+                    value={resultAmount}
+                    onChange={(e) => setResultAmount(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs font-medium text-slate-500 mb-1">Linea di prodotto (facoltativo)</span>
+                  <select
+                    className="input"
+                    value={resultProductLineId}
+                    onChange={(e) => setResultProductLineId(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {productLines.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+          </div>
         )}
 
         <label className="block">
