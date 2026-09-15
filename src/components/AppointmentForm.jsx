@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { createElement, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
@@ -368,20 +368,24 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                 placeholder="Es. 15/A"
               />
             </label>
-            {street.trim() && (
-              <div className="col-span-3 -mt-1">
-                
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                    combineAddress(street, civico)
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700 font-medium"
-                >
-                  <MapPin size={13} /> Apri su mappa
-                </a>
-              </div>
-            )}
+            {street.trim() &&
+              createElement(
+                "div",
+                { className: "col-span-3 -mt-1" },
+                createElement(
+                  "a",
+                  {
+                    href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                      combineAddress(street, civico)
+                    )}`,
+                    target: "_blank",
+                    rel: "noopener noreferrer",
+                    className: "inline-flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700 font-medium",
+                  },
+                  createElement(MapPin, { size: 13 }),
+                  " Apri su mappa"
+                )
+              )}
           </div>
         )}
 
