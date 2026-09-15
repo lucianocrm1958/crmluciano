@@ -9,7 +9,7 @@ import { formatCurrency } from "../lib/format";
 
 export default function Contatti() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { professionalCategories, leadSources, pipelineStages, operators } = useSettings();
+  const { professionalCategories, leadSources, pipelineStages, operators, callOutcomes } = useSettings();
 
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +22,7 @@ export default function Contatti() {
   const [filterStatus, setFilterStatus] = useState("attivo");
   const [filterOperator, setFilterOperator] = useState("");
   const [filterList, setFilterList] = useState("");
+  const [filterCallOutcome, setFilterCallOutcome] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
@@ -33,7 +34,7 @@ export default function Contatti() {
     const { data, error: err } = await supabase
       .from("contacts")
       .select(
-        "id, first_name, last_name, company, phone, landline_phone, email, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials)"
+        "id, first_name, last_name, company, phone, landline_phone, email, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, call_outcome_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials), call_outcomes(name)"
       )
       .order("created_at", { ascending: false });
     if (err) {
@@ -77,6 +78,7 @@ export default function Contatti() {
       if (filterStage && c.pipeline_stage_id !== filterStage) return false;
       if (filterOperator && c.operator_id !== filterOperator) return false;
       if (filterList && c.list_name !== filterList) return false;
+      if (filterCallOutcome && c.call_outcome_id !== filterCallOutcome) return false;
       if (term) {
         const haystack = [c.first_name, c.last_name, c.company, c.email, c.phone, c.landline_phone]
           .filter(Boolean)
@@ -86,7 +88,7 @@ export default function Contatti() {
       }
       return true;
     });
-  }, [contacts, search, filterCategory, filterSource, filterStage, filterStatus, filterOperator, filterList]);
+  }, [contacts, search, filterCategory, filterSource, filterStage, filterStatus, filterOperator, filterList, filterCallOutcome]);
 
   function openNew() {
     setEditingContact(null);
@@ -169,6 +171,18 @@ export default function Contatti() {
             </option>
           ))}
         </select>
+        <select
+          className="input max-w-[180px]"
+          value={filterCallOutcome}
+          onChange={(e) => setFilterCallOutcome(e.target.value)}
+        >
+          <option value="">Tutti gli esiti chiamata</option>
+          {callOutcomes.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {loading ? (
@@ -212,6 +226,9 @@ export default function Contatti() {
                       {c.list_name && c.operators?.initials ? " · " : ""}
                       {c.operators?.initials}
                     </p>
+                  )}
+                  {c.call_outcomes?.name && (
+                    <p className="text-[11px] text-amber-600 mt-0.5">{c.call_outcomes.name}</p>
                   )}
                 </div>
                 <div className="text-xs text-slate-500 space-y-0.5">
@@ -274,5 +291,3 @@ export default function Contatti() {
     </div>
   );
 }
-
-
