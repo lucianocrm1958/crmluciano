@@ -13,11 +13,14 @@ const TARGET_FIELDS = [
   { key: "address", label: "Indirizzo", required: false },
   { key: "city", label: "Località", required: false },
   { key: "notes", label: "Note", required: false },
+  { key: "notes2", label: "Note (colonna aggiuntiva, opzionale)", required: false },
 ];
 
 // Campi che, in modalità "Aggiorna", possono essere sovrascritti sui contatti già
 // esistenti. Nome e Cognome servono solo per riconoscere il contatto, non vengono
 // mai modificati, per evitare di alterare l'anagrafica per un refuso nel file.
+// "notes" viene gestito a parte (vedi getCombinedNotes) perché può derivare da due
+// colonne del file unite insieme; "notes2" non è una colonna reale del database.
 const UPDATABLE_FIELDS = ["company", "phone", "email", "address", "city", "notes"];
 
 // Normalizza un nome per il confronto: minuscolo, spazi eccedenti rimossi, accenti
@@ -28,6 +31,13 @@ function normalizeName(value) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+// Unisce le due colonne "Note" del file (se entrambe abbinate) in un unico testo,
+// separate da una riga vuota, così finiscono comunque in un solo campo Note.
+function getCombinedNotes(get) {
+  const parts = [get("notes"), get("notes2")].filter(Boolean);
+  return parts.join("\n\n");
 }
 
 export default function ImportContacts({ onClose, onImported }) {
@@ -184,7 +194,7 @@ export default function ImportContacts({ onClose, onImported }) {
           email: get("email") || null,
           address: get("address") || null,
           city: get("city") || null,
-          notes: get("notes") || null,
+          notes: getCombinedNotes(get) || null,
           lead_source_id: leadSourceId,
           professional_category_id: professionalCategoryId || null,
           pipeline_stage_id: pipelineStageId || null,
@@ -236,9 +246,12 @@ export default function ImportContacts({ onClose, onImported }) {
         const lastName = get("last_name");
         const updates = {};
         UPDATABLE_FIELDS.forEach((field) => {
+          if (field === "notes") return; // gestito a parte, può unire due colonne
           const value = get(field);
           if (value) updates[field] = value;
         });
+        const combinedNotes = getCombinedNotes(get);
+        if (combinedNotes) updates.notes = combinedNotes;
         return { firstName, lastName, updates };
       })
       .filter(Boolean);
