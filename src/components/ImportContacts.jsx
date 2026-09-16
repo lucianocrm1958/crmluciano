@@ -10,6 +10,8 @@ const TARGET_FIELDS = [
   { key: "company", label: "Azienda", required: false },
   { key: "phone", label: "Telefono", required: false },
   { key: "email", label: "Email", required: false },
+  { key: "address", label: "Indirizzo", required: false },
+  { key: "city", label: "Località", required: false },
 ];
 
 export default function ImportContacts({ onClose, onImported }) {
@@ -84,6 +86,8 @@ export default function ImportContacts({ onClose, onImported }) {
       company: ["azienda", "società", "company", "studio"],
       phone: ["telefono", "cell", "phone", "tel"],
       email: ["email", "mail", "e-mail"],
+      address: ["indirizzo", "address", "via", "residenza"],
+      city: ["città", "citta", "località", "localita", "comune", "city", "town"],
     };
     return (dict[key] || []).some((k) => h.includes(k));
   }
@@ -120,6 +124,8 @@ export default function ImportContacts({ onClose, onImported }) {
           company: get("company") || null,
           phone: get("phone") || null,
           email: get("email") || null,
+          address: get("address") || null,
+          city: get("city") || null,
           lead_source_id: leadSourceId,
           professional_category_id: professionalCategoryId || null,
           pipeline_stage_id: pipelineStageId || null,
@@ -323,4 +329,3 @@ export default function ImportContacts({ onClose, onImported }) {
     </Modal>
   );
 }
-
