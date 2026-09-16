@@ -12,12 +12,13 @@ const TARGET_FIELDS = [
   { key: "email", label: "Email", required: false },
   { key: "address", label: "Indirizzo", required: false },
   { key: "city", label: "Località", required: false },
+  { key: "notes", label: "Note", required: false },
 ];
 
 // Campi che, in modalità "Aggiorna", possono essere sovrascritti sui contatti già
 // esistenti. Nome e Cognome servono solo per riconoscere il contatto, non vengono
 // mai modificati, per evitare di alterare l'anagrafica per un refuso nel file.
-const UPDATABLE_FIELDS = ["company", "phone", "email", "address", "city"];
+const UPDATABLE_FIELDS = ["company", "phone", "email", "address", "city", "notes"];
 
 // Normalizza un nome per il confronto: minuscolo, spazi eccedenti rimossi, accenti
 // ignorati, così "Città" e "citta" o "Mario " e "mario" vengono riconosciuti uguali.
@@ -136,6 +137,7 @@ export default function ImportContacts({ onClose, onImported }) {
       email: ["email", "mail", "e-mail"],
       address: ["indirizzo", "address", "via", "residenza"],
       city: ["città", "citta", "località", "localita", "comune", "city", "town"],
+      notes: ["note", "notes", "annotazioni", "commento", "commenti"],
     };
     return (dict[key] || []).some((k) => h.includes(k));
   }
@@ -182,6 +184,7 @@ export default function ImportContacts({ onClose, onImported }) {
           email: get("email") || null,
           address: get("address") || null,
           city: get("city") || null,
+          notes: get("notes") || null,
           lead_source_id: leadSourceId,
           professional_category_id: professionalCategoryId || null,
           pipeline_stage_id: pipelineStageId || null,
