@@ -5,7 +5,7 @@ import Modal from "./Modal";
 import { Loader2, Trash2, Search, UserPlus, X } from "lucide-react";
 
 export default function ContractForm({ contract, presetContact, onClose, onSaved, onDeleted }) {
-  const { productLines, pipelineStages, loading: settingsLoading } = useSettings();
+  const { productLines, pipelineStages, operators, loading: settingsLoading } = useSettings();
   const isEdit = !!contract;
 
   const [selectedContact, setSelectedContact] = useState(
@@ -25,6 +25,7 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
   const [excessAmount, setExcessAmount] = useState(contract?.excess_new_amount ?? "");
   const [startDate, setStartDate] = useState(contract?.start_date || new Date().toISOString().slice(0, 10));
   const [durationMonths, setDurationMonths] = useState(contract?.duration_months ?? 12);
+  const [operatorId, setOperatorId] = useState(contract?.operator_id || "");
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -101,6 +102,7 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
       excess_new_amount: contractType === "rinnovo" && excessAmount !== "" ? Number(excessAmount) : null,
       start_date: startDate,
       duration_months: Number(durationMonths) || 12,
+      operator_id: operatorId || null,
     };
 
     try {
@@ -291,6 +293,18 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
           </label>
         </div>
 
+        <label className="block">
+          <span className="block text-xs font-medium text-slate-500 mb-1">Operatore (per le Statistiche mensili)</span>
+          <select className="input" value={operatorId} onChange={(e) => setOperatorId(e.target.value)}>
+            <option value="">—</option>
+            {operators.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.initials} {o.name ? `· ${o.name}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div className="flex items-center justify-between pt-2">
           <div>
             {isEdit && (
@@ -313,4 +327,3 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
     </Modal>
   );
 }
-
