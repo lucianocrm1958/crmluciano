@@ -2,10 +2,18 @@ import { createElement, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
-import { Loader2, Trash2, Search, UserPlus, X, MapPin } from "lucide-react";
+import { Loader2, Trash2, Search, UserPlus, X, MapPin, Plus } from "lucide-react";
+
+// Genera una chiave locale univoca per ogni riga prodotto dell'esito positivo,
+// prima ancora che venga salvata come contratto (che avrà un id vero del database).
+function makeLineKey() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `line-${Math.random().toString(36).slice(2)}`;
+}
 
 export default function AppointmentForm({ appointment, presetContact, initialDate, onClose, onSaved, onDeleted }) {
-  const { operators, callOutcomes, productLines } = useSettings();
+  const { operators, callOutcomes, productLines, pipelineStages } = useSettings();
   const isEdit = !!appointment;
 
   const [selectedContact, setSelectedContact] = useState(
@@ -34,8 +42,12 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [operatorId, setOperatorId] = useState(appointment?.operator_id || "");
   const [callOutcomeId, setCallOutcomeId] = useState(appointment?.call_outcome_id || "");
   const [result, setResult] = useState(appointment?.result || "");
-  const [resultAmount, setResultAmount] = useState(appointment?.result_amount ?? "");
-  const [resultProductLineId, setResultProductLineId] = useState(appointment?.result_product_line_id || "");
+  // Esito positivo: una riga per ogni prodotto venduto in questo appuntamento (es. cliente
+  // che acquista contemporaneamente due prodotti diversi), ciascuna con il proprio tipo
+  // (Nuovo/Rinnovo), linea di prodotto e importo. Ogni riga corrisponde a un contratto
+  // collegato a questo appuntamento tramite contracts.appointment_id.
+  const [resultLines, setResultLines] = useState([]);
+  const [linesReady, setLinesReady] = useState(!isEdit);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -92,6 +104,75 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     return () => clearTimeout(t);
   }, [contactSearch]);
 
+  // Per un appuntamento già salvato, recupera gli eventuali contratti già collegati
+  // (uno per prodotto venduto), per precompilare le righe dell'esito positivo.
+  useEffect(() => {
+    if (!isEdit || !appointment?.id) {
+      setLinesReady(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error: err } = await supabase
+        .from("contracts")
+        .select("id, contract_type, product_line_id, amount")
+        .eq("appointment_id", appointment.id);
+      if (cancelled) return;
+      if (!err && data && data.length > 0) {
+        setResultLines(
+          data.map((c) => ({
+            key: c.id,
+            contractId: c.id,
+            contractType: c.contract_type || "nuovo",
+            productLineId: c.product_line_id || "",
+            amount: c.amount ?? "",
+          }))
+        );
+      } else if (!err && appointment.result === "positivo" && appointment.result_amount) {
+        // Appuntamento "positivo" salvato prima dell'introduzione dei contratti collegati:
+        // precompila una riga con i vecchi dati, così salvando si crea il contratto mancante.
+        setResultLines([
+          {
+            key: makeLineKey(),
+            contractId: null,
+            contractType: "nuovo",
+            productLineId: appointment.result_product_line_id || "",
+            amount: appointment.result_amount,
+          },
+        ]);
+      }
+      setLinesReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Quando si seleziona l'esito "positivo" e non ci sono ancora righe prodotto, ne apre una vuota.
+  useEffect(() => {
+    if (!linesReady) return;
+    if (result === "positivo" && resultLines.length === 0) {
+      setResultLines([{ key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "" }]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, linesReady]);
+
+  function addResultLine() {
+    setResultLines((lines) => [
+      ...lines,
+      { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "" },
+    ]);
+  }
+
+  function removeResultLine(key) {
+    setResultLines((lines) => lines.filter((l) => l.key !== key));
+  }
+
+  function updateResultLine(key, field, value) {
+    setResultLines((lines) => lines.map((l) => (l.key === key ? { ...l, [field]: value } : l)));
+  }
+
   async function handleQuickAddContact() {
     if (!quickFirstName.trim()) {
       setError("Inserisci almeno il nome del nuovo contatto.");
@@ -120,6 +201,72 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     setQuickAddOpen(false);
   }
 
+  // Crea, aggiorna o rimuove i contratti collegati a questo appuntamento (uno per riga
+  // prodotto), in modo che gli importi dell'esito "positivo" siano sempre gli stessi
+  // numeri che poi compaiono in "Contratti e fatturato" e nelle Statistiche, suddivisi
+  // per Nuovo/Rinnovo e per linea di prodotto, invece di restare un dato scollegato
+  // scritto solo sull'appuntamento.
+  async function syncLinkedContracts(appointmentId, validLines) {
+    const { data: existing, error: fetchErr } = await supabase
+      .from("contracts")
+      .select("id")
+      .eq("appointment_id", appointmentId);
+    if (fetchErr) throw fetchErr;
+    const existingIds = new Set((existing || []).map((c) => c.id));
+
+    if (validLines.length === 0) {
+      if (existingIds.size > 0) {
+        const { error: delErr } = await supabase.from("contracts").delete().eq("appointment_id", appointmentId);
+        if (delErr) throw delErr;
+      }
+      return;
+    }
+
+    const keptIds = new Set();
+    for (const line of validLines) {
+      const linePayload = {
+        contact_id: selectedContact.id,
+        appointment_id: appointmentId,
+        product_line_id: line.productLineId || null,
+        contract_type: line.contractType,
+        amount: Number(line.amount),
+        start_date: date,
+      };
+
+      if (line.contractId && existingIds.has(line.contractId)) {
+        const { error: err } = await supabase.from("contracts").update(linePayload).eq("id", line.contractId);
+        if (err) throw err;
+        keptIds.add(line.contractId);
+      } else {
+        const { data, error: err } = await supabase
+          .from("contracts")
+          .insert({ ...linePayload, duration_months: 12 })
+          .select()
+          .single();
+        if (err) throw err;
+        keptIds.add(data.id);
+      }
+    }
+
+    // Rimuove eventuali contratti relativi a righe prodotto che l'utente ha cancellato dal form.
+    const toDelete = [...existingIds].filter((id) => !keptIds.has(id));
+    if (toDelete.length > 0) {
+      const { error: delErr } = await supabase.from("contracts").delete().in("id", toDelete);
+      if (delErr) throw delErr;
+    }
+
+    // Come quando si crea un contratto a mano: la trattativa è vinta, quindi il
+    // contatto passa automaticamente sulla fase "Chiuso vinto" della pipeline.
+    const wonStage = pipelineStages.find((s) => s.name === "Chiuso vinto");
+    if (wonStage) {
+      const { error: stageErr } = await supabase
+        .from("contacts")
+        .update({ pipeline_stage_id: wonStage.id, updated_at: new Date().toISOString() })
+        .eq("id", selectedContact.id);
+      if (stageErr) console.error(stageErr);
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!selectedContact) {
@@ -130,33 +277,48 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       setError("Inserisci l'indirizzo per un appuntamento in presenza.");
       return;
     }
+    const validLines =
+      status === "svolto" && result === "positivo"
+        ? resultLines.filter((l) => l.amount !== "" && Number(l.amount) > 0)
+        : [];
+    if (status === "svolto" && result === "positivo" && validLines.length === 0) {
+      setError("Inserisci almeno un importo valido per l'esito positivo.");
+      return;
+    }
     setSaving(true);
     setError(null);
 
-    const payload = {
-      contact_id: selectedContact.id,
-      appointment_date: date,
-      appointment_time: time,
-      mode,
-      address: mode === "presenza" ? combineAddress(street, civico) : null,
-      status,
-      outcome_notes: outcomeNotes.trim() || null,
-      operator_id: operatorId || null,
-      call_outcome_id: status === "svolto" ? null : callOutcomeId || null,
-      result: status === "svolto" ? result || null : null,
-      result_amount: status === "svolto" && result === "positivo" && resultAmount !== "" ? Number(resultAmount) : null,
-      result_product_line_id: status === "svolto" && result === "positivo" ? resultProductLineId || null : null,
-      updated_at: new Date().toISOString(),
-    };
-
     try {
+      const totalAmount = validLines.reduce((sum, l) => sum + Number(l.amount), 0);
+
+      const payload = {
+        contact_id: selectedContact.id,
+        appointment_date: date,
+        appointment_time: time,
+        mode,
+        address: mode === "presenza" ? combineAddress(street, civico) : null,
+        status,
+        outcome_notes: outcomeNotes.trim() || null,
+        operator_id: operatorId || null,
+        call_outcome_id: status === "svolto" ? null : callOutcomeId || null,
+        result: status === "svolto" ? result || null : null,
+        result_amount: status === "svolto" && result === "positivo" && totalAmount > 0 ? totalAmount : null,
+        result_product_line_id: null,
+        updated_at: new Date().toISOString(),
+      };
+
+      let appointmentId = appointment?.id || null;
       if (isEdit) {
         const { error: err } = await supabase.from("appointments").update(payload).eq("id", appointment.id);
         if (err) throw err;
       } else {
-        const { error: err } = await supabase.from("appointments").insert(payload);
+        const { data, error: err } = await supabase.from("appointments").insert(payload).select().single();
         if (err) throw err;
+        appointmentId = data.id;
       }
+
+      await syncLinkedContracts(appointmentId, validLines);
+
       onSaved?.();
       onClose();
     } catch (err) {
@@ -426,32 +588,95 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             </label>
 
             {result === "positivo" && (
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="block text-xs font-medium text-slate-500 mb-1">Importo (€)</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="input"
-                    value={resultAmount}
-                    onChange={(e) => setResultAmount(e.target.value)}
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-xs font-medium text-slate-500 mb-1">Linea di prodotto (facoltativo)</span>
-                  <select
-                    className="input"
-                    value={resultProductLineId}
-                    onChange={(e) => setResultProductLineId(e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {productLines.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="space-y-3">
+                {!linesReady ? (
+                  <p className="text-xs text-slate-400 flex items-center gap-1">
+                    <Loader2 size={12} className="animate-spin" /> Caricamento prodotti collegati...
+                  </p>
+                ) : (
+                  <>
+                    <span className="block text-xs font-medium text-slate-500">
+                      Prodotti venduti (una riga per ciascun prodotto, se il cliente ne acquista più di uno)
+                    </span>
+                    <div className="space-y-2">
+                      {resultLines.map((line, idx) => (
+                        <div key={line.key} className="border border-slate-200 rounded-lg p-2.5 space-y-2 bg-slate-50/60">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                              Prodotto {idx + 1}
+                            </span>
+                            {resultLines.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeResultLine(line.key)}
+                                className="text-slate-300 hover:text-rose-500"
+                                title="Rimuovi riga"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                              <input
+                                type="radio"
+                                checked={line.contractType === "nuovo"}
+                                onChange={() => updateResultLine(line.key, "contractType", "nuovo")}
+                              />{" "}
+                              Nuovo
+                            </label>
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                              <input
+                                type="radio"
+                                checked={line.contractType === "rinnovo"}
+                                onChange={() => updateResultLine(line.key, "contractType", "rinnovo")}
+                              />{" "}
+                              Rinnovo
+                            </label>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="block">
+                              <span className="block text-[11px] text-slate-400 mb-0.5">Importo (€) *</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className="input"
+                                value={line.amount}
+                                onChange={(e) => updateResultLine(line.key, "amount", e.target.value)}
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="block text-[11px] text-slate-400 mb-0.5">Linea di prodotto</span>
+                              <select
+                                className="input"
+                                value={line.productLineId}
+                                onChange={(e) => updateResultLine(line.key, "productLineId", e.target.value)}
+                              >
+                                <option value="">—</option>
+                                {productLines.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addResultLine}
+                      className="flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-700 font-medium"
+                    >
+                      <Plus size={13} /> Aggiungi un altro prodotto
+                    </button>
+                    <p className="text-xs text-slate-400">
+                      Il totale delle righe viene registrato automaticamente anche in "Contratti e fatturato" (una riga
+                      per ogni prodotto).
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </div>
