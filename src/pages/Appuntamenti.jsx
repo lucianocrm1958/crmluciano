@@ -42,7 +42,7 @@ export default function Appuntamenti() {
     const { data, error: err } = await supabase
       .from("appointments")
       .select(
-        "id, appointment_date, appointment_time, mode, address, status, outcome_notes, contact_id, operator_id, contacts(first_name, last_name, company, phone), operators(initials)"
+        "id, appointment_date, appointment_time, mode, address, status, outcome_notes, contact_id, operator_id, call_outcome_id, result, result_amount, result_product_line_id, contacts(first_name, last_name, company, phone), operators(initials)"
       )
       .order("appointment_date", { ascending: true })
       .order("appointment_time", { ascending: true });
