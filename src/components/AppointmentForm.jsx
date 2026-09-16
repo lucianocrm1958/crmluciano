@@ -115,7 +115,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     (async () => {
       const { data, error: err } = await supabase
         .from("contracts")
-        .select("id, contract_type, product_line_id, amount")
+        .select("id, contract_type, product_line_id, amount, excess_new_amount")
         .eq("appointment_id", appointment.id);
       if (cancelled) return;
       if (!err && data && data.length > 0) {
@@ -126,6 +126,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             contractType: c.contract_type || "nuovo",
             productLineId: c.product_line_id || "",
             amount: c.amount ?? "",
+            excessAmount: c.excess_new_amount ?? "",
           }))
         );
       } else if (!err && appointment.result === "positivo" && appointment.result_amount) {
@@ -138,6 +139,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             contractType: "nuovo",
             productLineId: appointment.result_product_line_id || "",
             amount: appointment.result_amount,
+            excessAmount: "",
           },
         ]);
       }
@@ -153,7 +155,9 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   useEffect(() => {
     if (!linesReady) return;
     if (result === "positivo" && resultLines.length === 0) {
-      setResultLines([{ key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "" }]);
+      setResultLines([
+        { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "", excessAmount: "" },
+      ]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, linesReady]);
@@ -161,7 +165,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   function addResultLine() {
     setResultLines((lines) => [
       ...lines,
-      { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "" },
+      { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "", excessAmount: "" },
     ]);
   }
 
@@ -230,6 +234,8 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         product_line_id: line.productLineId || null,
         contract_type: line.contractType,
         amount: Number(line.amount),
+        excess_new_amount:
+          line.contractType === "rinnovo" && line.excessAmount !== "" ? Number(line.excessAmount) : null,
         start_date: date,
       };
 
@@ -660,6 +666,21 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                                 ))}
                               </select>
                             </label>
+                            {line.contractType === "rinnovo" && (
+                              <label className="block col-span-2">
+                                <span className="block text-[11px] text-slate-400 mb-0.5">
+                                  di cui quota "Nuovo" (€) — solo se l'importo supera il precedente contratto
+                                </span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="input"
+                                  placeholder="Lascia vuoto se è un rinnovo pieno"
+                                  value={line.excessAmount}
+                                  onChange={(e) => updateResultLine(line.key, "excessAmount", e.target.value)}
+                                />
+                              </label>
+                            )}
                           </div>
                         </div>
                       ))}
