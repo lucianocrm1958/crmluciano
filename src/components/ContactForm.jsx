@@ -12,6 +12,8 @@ const emptyForm = {
   phone: "",
   landline_phone: "",
   email: "",
+  address: "",
+  city: "",
   professional_category_id: "",
   lead_source_id: "",
   pipeline_stage_id: "",
@@ -45,6 +47,8 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           phone: contact.phone || "",
           landline_phone: contact.landline_phone || "",
           email: contact.email || "",
+          address: contact.address || "",
+          city: contact.city || "",
           professional_category_id: contact.professional_category_id || "",
           lead_source_id: contact.lead_source_id || "",
           pipeline_stage_id: contact.pipeline_stage_id || "",
@@ -87,6 +91,8 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
       phone: form.phone.trim() || null,
       landline_phone: form.landline_phone.trim() || null,
       email: form.email.trim() || null,
+      address: form.address.trim() || null,
+      city: form.city.trim() || null,
       professional_category_id: form.professional_category_id || null,
       lead_source_id: form.lead_source_id || null,
       pipeline_stage_id: form.pipeline_stage_id || null,
@@ -197,6 +203,15 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
             onChange={(e) => update("email", e.target.value)}
           />
         </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Indirizzo">
+            <input className="input" value={form.address} onChange={(e) => update("address", e.target.value)} />
+          </Field>
+          <Field label="Località">
+            <input className="input" value={form.city} onChange={(e) => update("city", e.target.value)} />
+          </Field>
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Categoria professionale">
