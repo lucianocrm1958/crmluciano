@@ -10,6 +10,18 @@ function toMonthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// Un appuntamento "positivo" può avere più contratti collegati (uno per ogni prodotto
+// venduto nella stessa visita). Se non ce n'è nessuno collegato (vecchi appuntamenti
+// salvati prima di questa funzionalità), si ricade sull'importo scritto direttamente
+// sull'appuntamento, considerato convenzionalmente "Nuovo" perché il tipo non era tracciato.
+function getPositivoLines(a) {
+  if (Array.isArray(a.contracts) && a.contracts.length > 0) return a.contracts;
+  if (a.result_amount) {
+    return [{ amount: a.result_amount, contract_type: "nuovo", product_lines: a.product_lines || null }];
+  }
+  return [];
+}
+
 export default function Statistiche() {
   const { operators } = useSettings();
 
@@ -32,7 +44,7 @@ export default function Statistiche() {
     const { data, error: err } = await supabase
       .from("appointments")
       .select(
-        "id, appointment_date, status, operator_id, result, result_amount, result_product_line_id, operators(initials, name), product_lines(name)"
+        "id, appointment_date, status, operator_id, result, result_amount, result_product_line_id, operators(initials, name), product_lines(name), contracts(amount, contract_type, product_line_id, product_lines(name))"
       )
       .gte("appointment_date", rangeStart)
       .lt("appointment_date", rangeEnd);
@@ -65,7 +77,8 @@ export default function Statistiche() {
       nonEffettuato: 0,
       daRifissare: 0,
       positivo: 0,
-      positivoImporto: 0,
+      positivoNuovo: 0,
+      positivoRinnovo: 0,
       negativo: 0,
       pending: 0,
     }));
@@ -78,7 +91,8 @@ export default function Statistiche() {
       nonEffettuato: 0,
       daRifissare: 0,
       positivo: 0,
-      positivoImporto: 0,
+      positivoNuovo: 0,
+      positivoRinnovo: 0,
       negativo: 0,
       pending: 0,
     };
@@ -91,7 +105,11 @@ export default function Statistiche() {
         row.svolti += 1;
         if (a.result === "positivo") {
           row.positivo += 1;
-          row.positivoImporto += Number(a.result_amount) || 0;
+          getPositivoLines(a).forEach((line) => {
+            const amt = Number(line.amount) || 0;
+            if (line.contract_type === "rinnovo") row.positivoRinnovo += amt;
+            else row.positivoNuovo += amt;
+          });
         } else if (a.result === "negativo") {
           row.negativo += 1;
         } else if (a.result === "pending") {
@@ -106,7 +124,7 @@ export default function Statistiche() {
 
     const allRows = [...rows];
     if (senzaOperatore.totale > 0) allRows.push(senzaOperatore);
-    return allRows.filter((r) => r.totale > 0);
+    return allRows.map((r) => ({ ...r, positivoImporto: r.positivoNuovo + r.positivoRinnovo })).filter((r) => r.totale > 0);
   }, [appointments, operators]);
 
   const totals = useMemo(() => {
@@ -117,12 +135,25 @@ export default function Statistiche() {
         acc.nonEffettuato += r.nonEffettuato;
         acc.daRifissare += r.daRifissare;
         acc.positivo += r.positivo;
+        acc.positivoNuovo += r.positivoNuovo;
+        acc.positivoRinnovo += r.positivoRinnovo;
         acc.positivoImporto += r.positivoImporto;
         acc.negativo += r.negativo;
         acc.pending += r.pending;
         return acc;
       },
-      { totale: 0, svolti: 0, nonEffettuato: 0, daRifissare: 0, positivo: 0, positivoImporto: 0, negativo: 0, pending: 0 }
+      {
+        totale: 0,
+        svolti: 0,
+        nonEffettuato: 0,
+        daRifissare: 0,
+        positivo: 0,
+        positivoNuovo: 0,
+        positivoRinnovo: 0,
+        positivoImporto: 0,
+        negativo: 0,
+        pending: 0,
+      }
     );
   }, [perOperator]);
 
@@ -130,11 +161,16 @@ export default function Statistiche() {
     const byLine = new Map();
     appointments.forEach((a) => {
       if (a.status !== "svolto" || a.result !== "positivo") return;
-      const label = a.product_lines?.name || "Non specificata";
-      const entry = byLine.get(label) || { label, count: 0, importo: 0 };
-      entry.count += 1;
-      entry.importo += Number(a.result_amount) || 0;
-      byLine.set(label, entry);
+      getPositivoLines(a).forEach((line) => {
+        const label = line.product_lines?.name || "Non specificata";
+        const entry = byLine.get(label) || { label, count: 0, importo: 0, nuovo: 0, rinnovo: 0 };
+        entry.count += 1;
+        const amt = Number(line.amount) || 0;
+        entry.importo += amt;
+        if (line.contract_type === "rinnovo") entry.rinnovo += amt;
+        else entry.nuovo += amt;
+        byLine.set(label, entry);
+      });
     });
     return Array.from(byLine.values()).sort((a, b) => b.importo - a.importo);
   }, [appointments]);
@@ -179,7 +215,9 @@ export default function Statistiche() {
             <KpiCard
               label="Esiti positivi"
               value={totals.positivo}
-              sublabel={formatCurrency(totals.positivoImporto)}
+              sublabel={`${formatCurrency(totals.positivoImporto)} · Nuovo ${formatCurrency(
+                totals.positivoNuovo
+              )} · Rinnovo ${formatCurrency(totals.positivoRinnovo)}`}
               tone="default"
             />
             <KpiCard
@@ -204,7 +242,9 @@ export default function Statistiche() {
                     <th className="text-right px-3 py-2.5">Non eff.</th>
                     <th className="text-right px-3 py-2.5">Da rifissare</th>
                     <th className="text-right px-3 py-2.5">Positivo</th>
-                    <th className="text-right px-3 py-2.5">Importo</th>
+                    <th className="text-right px-3 py-2.5">Nuovo (€)</th>
+                    <th className="text-right px-3 py-2.5">Rinnovo (€)</th>
+                    <th className="text-right px-3 py-2.5">Totale (€)</th>
                     <th className="text-right px-3 py-2.5">Negativo</th>
                     <th className="text-right px-3 py-2.5">Pending</th>
                   </tr>
@@ -218,7 +258,13 @@ export default function Statistiche() {
                       <td className="text-right px-3 py-2.5 text-rose-500">{r.nonEffettuato}</td>
                       <td className="text-right px-3 py-2.5 text-amber-600">{r.daRifissare}</td>
                       <td className="text-right px-3 py-2.5 text-emerald-600">{r.positivo}</td>
-                      <td className="text-right px-3 py-2.5 text-slate-600 whitespace-nowrap">
+                      <td className="text-right px-3 py-2.5 text-navy-600 whitespace-nowrap">
+                        {formatCurrency(r.positivoNuovo)}
+                      </td>
+                      <td className="text-right px-3 py-2.5 text-gold-500 whitespace-nowrap">
+                        {formatCurrency(r.positivoRinnovo)}
+                      </td>
+                      <td className="text-right px-3 py-2.5 text-slate-700 font-medium whitespace-nowrap">
                         {formatCurrency(r.positivoImporto)}
                       </td>
                       <td className="text-right px-3 py-2.5 text-rose-500">{r.negativo}</td>
@@ -234,6 +280,8 @@ export default function Statistiche() {
                     <td className="text-right px-3 py-2.5">{totals.nonEffettuato}</td>
                     <td className="text-right px-3 py-2.5">{totals.daRifissare}</td>
                     <td className="text-right px-3 py-2.5">{totals.positivo}</td>
+                    <td className="text-right px-3 py-2.5 whitespace-nowrap">{formatCurrency(totals.positivoNuovo)}</td>
+                    <td className="text-right px-3 py-2.5 whitespace-nowrap">{formatCurrency(totals.positivoRinnovo)}</td>
                     <td className="text-right px-3 py-2.5 whitespace-nowrap">{formatCurrency(totals.positivoImporto)}</td>
                     <td className="text-right px-3 py-2.5">{totals.negativo}</td>
                     <td className="text-right px-3 py-2.5">{totals.pending}</td>
@@ -252,9 +300,14 @@ export default function Statistiche() {
                 {productLineBreakdown.map((p) => (
                   <div key={p.label} className="flex items-center justify-between px-4 py-2.5 text-sm">
                     <span className="text-slate-600">
-                      {p.label} <span className="text-slate-400">· {p.count} appuntamenti</span>
+                      {p.label} <span className="text-slate-400">· {p.count} prodotti venduti</span>
                     </span>
-                    <span className="font-medium text-navy-700">{formatCurrency(p.importo)}</span>
+                    <div className="text-right">
+                      <p className="font-medium text-navy-700">{formatCurrency(p.importo)}</p>
+                      <p className="text-xs text-slate-400">
+                        Nuovo {formatCurrency(p.nuovo)} · Rinnovo {formatCurrency(p.rinnovo)}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
