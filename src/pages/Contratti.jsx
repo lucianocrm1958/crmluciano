@@ -18,7 +18,7 @@ export default function Contratti() {
     const { data, error: err } = await supabase
       .from("contracts")
       .select(
-        "id, amount, excess_new_amount, contract_type, start_date, duration_months, contact_id, product_line_id, contacts(first_name, last_name, company), product_lines(name)"
+        "id, amount, excess_new_amount, contract_type, start_date, duration_months, contact_id, product_line_id, operator_id, contacts(first_name, last_name, company), product_lines(name)"
       )
       .order("start_date", { ascending: false });
     if (err) {
