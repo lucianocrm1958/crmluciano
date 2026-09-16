@@ -17,9 +17,19 @@ function toMonthKey(date) {
 function getPositivoLines(a) {
   if (Array.isArray(a.contracts) && a.contracts.length > 0) return a.contracts;
   if (a.result_amount) {
-    return [{ amount: a.result_amount, contract_type: "nuovo", product_lines: a.product_lines || null }];
+    return [{ amount: a.result_amount, contract_type: "nuovo", excess_new_amount: null, product_lines: a.product_lines || null }];
   }
   return [];
+}
+
+// Stessa logica di split usata in "Contratti e fatturato": un contratto Rinnovo può
+// comunque contenere una quota "Nuovo" quando l'importo supera il contratto precedente
+// (campo "eccedenza"); un contratto Nuovo è invece per intero Nuovo.
+function splitNuovoRinnovo(line) {
+  const amount = Number(line.amount) || 0;
+  if (line.contract_type === "nuovo") return { nuovo: amount, rinnovo: 0 };
+  const excess = Number(line.excess_new_amount) || 0;
+  return { nuovo: excess, rinnovo: amount - excess };
 }
 
 export default function Statistiche() {
@@ -44,7 +54,7 @@ export default function Statistiche() {
     const { data, error: err } = await supabase
       .from("appointments")
       .select(
-        "id, appointment_date, status, operator_id, result, result_amount, result_product_line_id, operators(initials, name), product_lines(name), contracts(amount, contract_type, product_line_id, product_lines(name))"
+        "id, appointment_date, status, operator_id, result, result_amount, result_product_line_id, operators(initials, name), product_lines(name), contracts(amount, contract_type, excess_new_amount, product_line_id, product_lines(name))"
       )
       .gte("appointment_date", rangeStart)
       .lt("appointment_date", rangeEnd);
@@ -106,9 +116,9 @@ export default function Statistiche() {
         if (a.result === "positivo") {
           row.positivo += 1;
           getPositivoLines(a).forEach((line) => {
-            const amt = Number(line.amount) || 0;
-            if (line.contract_type === "rinnovo") row.positivoRinnovo += amt;
-            else row.positivoNuovo += amt;
+            const { nuovo, rinnovo } = splitNuovoRinnovo(line);
+            row.positivoNuovo += nuovo;
+            row.positivoRinnovo += rinnovo;
           });
         } else if (a.result === "negativo") {
           row.negativo += 1;
@@ -165,10 +175,10 @@ export default function Statistiche() {
         const label = line.product_lines?.name || "Non specificata";
         const entry = byLine.get(label) || { label, count: 0, importo: 0, nuovo: 0, rinnovo: 0 };
         entry.count += 1;
-        const amt = Number(line.amount) || 0;
-        entry.importo += amt;
-        if (line.contract_type === "rinnovo") entry.rinnovo += amt;
-        else entry.nuovo += amt;
+        const { nuovo, rinnovo } = splitNuovoRinnovo(line);
+        entry.importo += nuovo + rinnovo;
+        entry.nuovo += nuovo;
+        entry.rinnovo += rinnovo;
         byLine.set(label, entry);
       });
     });
