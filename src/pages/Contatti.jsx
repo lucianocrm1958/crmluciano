@@ -34,7 +34,7 @@ export default function Contatti() {
     const { data, error: err } = await supabase
       .from("contacts")
       .select(
-        "id, first_name, last_name, company, phone, landline_phone, email, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, call_outcome_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials), call_outcomes(name)"
+        "id, first_name, last_name, company, phone, landline_phone, email, address, city, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, call_outcome_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials), call_outcomes(name)"
       )
       .order("created_at", { ascending: false });
     if (err) {
@@ -80,7 +80,7 @@ export default function Contatti() {
       if (filterList && c.list_name !== filterList) return false;
       if (filterCallOutcome && c.call_outcome_id !== filterCallOutcome) return false;
       if (term) {
-        const haystack = [c.first_name, c.last_name, c.company, c.email, c.phone, c.landline_phone]
+        const haystack = [c.first_name, c.last_name, c.company, c.email, c.phone, c.landline_phone, c.address, c.city]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -220,6 +220,7 @@ export default function Contatti() {
                       <Building2 size={11} /> {c.company}
                     </p>
                   )}
+                  {c.city && <p className="text-xs text-slate-400">{c.city}</p>}
                   {(c.list_name || c.operators?.initials) && (
                     <p className="text-[11px] text-slate-400 mt-0.5">
                       {c.list_name}
