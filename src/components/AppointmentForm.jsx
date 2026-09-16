@@ -237,6 +237,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         excess_new_amount:
           line.contractType === "rinnovo" && line.excessAmount !== "" ? Number(line.excessAmount) : null,
         start_date: date,
+        operator_id: operatorId || null,
       };
 
       if (line.contractId && existingIds.has(line.contractId)) {
