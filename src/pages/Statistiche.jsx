@@ -10,25 +10,13 @@ function toMonthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// Un appuntamento "positivo" può avere più contratti collegati (uno per ogni prodotto
-// venduto nella stessa visita). Se non ce n'è nessuno collegato (vecchi appuntamenti
-// salvati prima di questa funzionalità), si ricade sull'importo scritto direttamente
-// sull'appuntamento, considerato convenzionalmente "Nuovo" perché il tipo non era tracciato.
-function getPositivoLines(a) {
-  if (Array.isArray(a.contracts) && a.contracts.length > 0) return a.contracts;
-  if (a.result_amount) {
-    return [{ amount: a.result_amount, contract_type: "nuovo", excess_new_amount: null, product_lines: a.product_lines || null }];
-  }
-  return [];
-}
-
 // Stessa logica di split usata in "Contratti e fatturato": un contratto Rinnovo può
 // comunque contenere una quota "Nuovo" quando l'importo supera il contratto precedente
 // (campo "eccedenza"); un contratto Nuovo è invece per intero Nuovo.
-function splitNuovoRinnovo(line) {
-  const amount = Number(line.amount) || 0;
-  if (line.contract_type === "nuovo") return { nuovo: amount, rinnovo: 0 };
-  const excess = Number(line.excess_new_amount) || 0;
+function splitNuovoRinnovo(c) {
+  const amount = Number(c.amount) || 0;
+  if (c.contract_type === "nuovo") return { nuovo: amount, rinnovo: 0 };
+  const excess = Number(c.excess_new_amount) || 0;
   return { nuovo: excess, rinnovo: amount - excess };
 }
 
@@ -37,6 +25,7 @@ export default function Statistiche() {
 
   const [monthKey, setMonthKey] = useState(() => toMonthKey(new Date()));
   const [appointments, setAppointments] = useState([]);
+  const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -44,32 +33,44 @@ export default function Statistiche() {
 
   const monthLabel = `${MONTH_LABELS[month - 1]} ${year}`;
 
-  async function loadAppointments() {
+  // I conteggi (totale/svolti/non svolti/esiti) vengono dagli Appuntamenti; gli importi
+  // Nuovo/Rinnovo vengono invece direttamente dalla tabella Contratti — la stessa fonte
+  // usata da "Contratti e fatturato" e dalla Dashboard — filtrata per data di inizio nel
+  // mese. Così un contratto registrato direttamente in "Contratti e fatturato" (senza
+  // passare da un appuntamento) viene comunque conteggiato qui, ed è sempre lo stesso
+  // numero ovunque compaia nel CRM.
+  async function loadData() {
     setLoading(true);
     setError(null);
     const rangeStart = `${monthKey}-01`;
     const nextMonthDate = new Date(year, month, 1); // month è già 1-based qui, quindi "month" = mese successivo (0-based + 1)
     const rangeEnd = toMonthKey(nextMonthDate) + "-01";
 
-    const { data, error: err } = await supabase
-      .from("appointments")
-      .select(
-        "id, appointment_date, status, operator_id, result, result_amount, result_product_line_id, operators(initials, name), product_lines(name), contracts(amount, contract_type, excess_new_amount, product_line_id, product_lines(name))"
-      )
-      .gte("appointment_date", rangeStart)
-      .lt("appointment_date", rangeEnd);
+    const [appointmentsRes, contractsRes] = await Promise.all([
+      supabase
+        .from("appointments")
+        .select("id, appointment_date, status, operator_id, result")
+        .gte("appointment_date", rangeStart)
+        .lt("appointment_date", rangeEnd),
+      supabase
+        .from("contracts")
+        .select("id, amount, contract_type, excess_new_amount, operator_id, product_line_id, product_lines(name)")
+        .gte("start_date", rangeStart)
+        .lt("start_date", rangeEnd),
+    ]);
 
-    if (err) {
-      console.error(err);
-      setError("Non sono riuscito a caricare gli appuntamenti.");
+    if (appointmentsRes.error || contractsRes.error) {
+      console.error(appointmentsRes.error || contractsRes.error);
+      setError("Non sono riuscito a caricare i dati.");
     } else {
-      setAppointments(data || []);
+      setAppointments(appointmentsRes.data || []);
+      setContracts(contractsRes.data || []);
     }
     setLoading(false);
   }
 
   useEffect(() => {
-    loadAppointments();
+    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthKey]);
 
@@ -79,52 +80,39 @@ export default function Statistiche() {
   }
 
   const perOperator = useMemo(() => {
-    const rows = operators.map((o) => ({
-      id: o.id,
-      label: `${o.initials}${o.name ? ` · ${o.name}` : ""}`,
-      totale: 0,
-      svolti: 0,
-      nonEffettuato: 0,
-      daRifissare: 0,
-      positivo: 0,
-      positivoNuovo: 0,
-      positivoRinnovo: 0,
-      negativo: 0,
-      pending: 0,
-    }));
-    // riga per gli appuntamenti senza operatore assegnato
-    const senzaOperatore = {
-      id: "__none__",
-      label: "Senza operatore",
-      totale: 0,
-      svolti: 0,
-      nonEffettuato: 0,
-      daRifissare: 0,
-      positivo: 0,
-      positivoNuovo: 0,
-      positivoRinnovo: 0,
-      negativo: 0,
-      pending: 0,
-    };
-    const byId = new Map(rows.map((r) => [r.id, r]));
+    const rows = new Map();
+    function emptyRow(id, label) {
+      return {
+        id,
+        label,
+        totale: 0,
+        svolti: 0,
+        nonEffettuato: 0,
+        daRifissare: 0,
+        positivo: 0,
+        positivoNuovo: 0,
+        positivoRinnovo: 0,
+        negativo: 0,
+        pending: 0,
+      };
+    }
+    operators.forEach((o) => {
+      rows.set(o.id, emptyRow(o.id, `${o.initials}${o.name ? ` · ${o.name}` : ""}`));
+    });
+    const noneRow = emptyRow("__none__", "Senza operatore");
+    function rowFor(operatorId) {
+      if (operatorId && rows.has(operatorId)) return rows.get(operatorId);
+      return noneRow;
+    }
 
     appointments.forEach((a) => {
-      const row = (a.operator_id && byId.get(a.operator_id)) || senzaOperatore;
+      const row = rowFor(a.operator_id);
       row.totale += 1;
       if (a.status === "svolto") {
         row.svolti += 1;
-        if (a.result === "positivo") {
-          row.positivo += 1;
-          getPositivoLines(a).forEach((line) => {
-            const { nuovo, rinnovo } = splitNuovoRinnovo(line);
-            row.positivoNuovo += nuovo;
-            row.positivoRinnovo += rinnovo;
-          });
-        } else if (a.result === "negativo") {
-          row.negativo += 1;
-        } else if (a.result === "pending") {
-          row.pending += 1;
-        }
+        if (a.result === "positivo") row.positivo += 1;
+        else if (a.result === "negativo") row.negativo += 1;
+        else if (a.result === "pending") row.pending += 1;
       } else if (a.status === "non_effettuato") {
         row.nonEffettuato += 1;
       } else if (a.status === "da_rifissare") {
@@ -132,10 +120,19 @@ export default function Statistiche() {
       }
     });
 
-    const allRows = [...rows];
-    if (senzaOperatore.totale > 0) allRows.push(senzaOperatore);
-    return allRows.map((r) => ({ ...r, positivoImporto: r.positivoNuovo + r.positivoRinnovo })).filter((r) => r.totale > 0);
-  }, [appointments, operators]);
+    contracts.forEach((c) => {
+      const row = rowFor(c.operator_id);
+      const { nuovo, rinnovo } = splitNuovoRinnovo(c);
+      row.positivoNuovo += nuovo;
+      row.positivoRinnovo += rinnovo;
+    });
+
+    const allRows = [...rows.values()];
+    if (noneRow.totale > 0 || noneRow.positivoNuovo > 0 || noneRow.positivoRinnovo > 0) allRows.push(noneRow);
+    return allRows
+      .map((r) => ({ ...r, positivoImporto: r.positivoNuovo + r.positivoRinnovo }))
+      .filter((r) => r.totale > 0 || r.positivoImporto > 0);
+  }, [appointments, contracts, operators]);
 
   const totals = useMemo(() => {
     return perOperator.reduce(
@@ -169,28 +166,25 @@ export default function Statistiche() {
 
   const productLineBreakdown = useMemo(() => {
     const byLine = new Map();
-    appointments.forEach((a) => {
-      if (a.status !== "svolto" || a.result !== "positivo") return;
-      getPositivoLines(a).forEach((line) => {
-        const label = line.product_lines?.name || "Non specificata";
-        const entry = byLine.get(label) || { label, count: 0, importo: 0, nuovo: 0, rinnovo: 0 };
-        entry.count += 1;
-        const { nuovo, rinnovo } = splitNuovoRinnovo(line);
-        entry.importo += nuovo + rinnovo;
-        entry.nuovo += nuovo;
-        entry.rinnovo += rinnovo;
-        byLine.set(label, entry);
-      });
+    contracts.forEach((c) => {
+      const label = c.product_lines?.name || "Non specificata";
+      const entry = byLine.get(label) || { label, count: 0, importo: 0, nuovo: 0, rinnovo: 0 };
+      entry.count += 1;
+      const { nuovo, rinnovo } = splitNuovoRinnovo(c);
+      entry.importo += nuovo + rinnovo;
+      entry.nuovo += nuovo;
+      entry.rinnovo += rinnovo;
+      byLine.set(label, entry);
     });
     return Array.from(byLine.values()).sort((a, b) => b.importo - a.importo);
-  }, [appointments]);
+  }, [contracts]);
 
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-navy-700">Statistiche</h1>
-          <p className="text-sm text-slate-500">Appuntamenti svolti e relativi esiti, per operatore</p>
+          <p className="text-sm text-slate-500">Appuntamenti svolti e fatturato, per operatore</p>
         </div>
         <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1.5">
           <button onClick={() => changeMonth(-1)} className="text-slate-400 hover:text-navy-600 p-1">
@@ -209,9 +203,9 @@ export default function Statistiche() {
         </div>
       ) : error ? (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3">{error}</div>
-      ) : appointments.length === 0 ? (
+      ) : appointments.length === 0 && contracts.length === 0 ? (
         <div className="bg-white border border-dashed border-slate-300 rounded-xl p-10 text-center text-slate-400 text-sm">
-          Nessun appuntamento registrato in {monthLabel}.
+          Nessun appuntamento o contratto registrato in {monthLabel}.
         </div>
       ) : (
         <>
@@ -241,6 +235,10 @@ export default function Statistiche() {
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
               <p className="text-sm font-semibold text-navy-700">Dettaglio per operatore</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Gli importi Nuovo/Rinnovo includono anche i contratti registrati direttamente in "Contratti e
+                fatturato" (non solo quelli inseriti dall'appuntamento), purché abbiano un operatore assegnato.
+              </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -304,13 +302,13 @@ export default function Statistiche() {
           {productLineBreakdown.length > 0 && (
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden max-w-xl">
               <div className="px-4 py-3 border-b border-slate-100">
-                <p className="text-sm font-semibold text-navy-700">Esiti positivi per linea di prodotto</p>
+                <p className="text-sm font-semibold text-navy-700">Fatturato per linea di prodotto</p>
               </div>
               <div className="divide-y divide-slate-100">
                 {productLineBreakdown.map((p) => (
                   <div key={p.label} className="flex items-center justify-between px-4 py-2.5 text-sm">
                     <span className="text-slate-600">
-                      {p.label} <span className="text-slate-400">· {p.count} prodotti venduti</span>
+                      {p.label} <span className="text-slate-400">· {p.count} contratti</span>
                     </span>
                     <div className="text-right">
                       <p className="font-medium text-navy-700">{formatCurrency(p.importo)}</p>
