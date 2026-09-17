@@ -63,6 +63,8 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
   );
   const [status, setStatus] = useState(contact?.status || "attivo");
   const [lostReasonId, setLostReasonId] = useState(contact?.lost_reason_id || "");
+  const [callbackDate, setCallbackDate] = useState("");
+  const [callbackNote, setCallbackNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
@@ -109,13 +111,31 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
     };
 
     try {
+      let contactId = contact?.id || null;
       if (isEdit) {
         const { error: err } = await supabase.from("contacts").update(payload).eq("id", contact.id);
         if (err) throw err;
       } else {
-        const { error: err } = await supabase.from("contacts").insert(payload);
+        const { data: inserted, error: err } = await supabase
+          .from("contacts")
+          .insert(payload)
+          .select()
+          .single();
         if (err) throw err;
+        contactId = inserted?.id || null;
       }
+
+      if (callbackDate && contactId) {
+        const { error: followUpErr } = await supabase.from("follow_ups").insert({
+          contact_id: contactId,
+          due_date: callbackDate,
+          note: callbackNote.trim() || "Richiamare il cliente",
+          status: "aperto",
+          operator_id: form.operator_id || null,
+        });
+        if (followUpErr) throw followUpErr;
+      }
+
       onSaved?.();
       onClose();
     } catch (err) {
@@ -283,6 +303,31 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
             ))}
           </select>
         </Field>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
+          <p className="text-xs text-amber-700">
+            Se il cliente ti ha chiesto di essere richiamato, indica qui la data: al salvataggio verrà creato
+            automaticamente un promemoria nella sezione Follow-up, senza bisogno di inserirlo di nuovo lì.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Richiamare il (facoltativo)">
+              <input
+                type="date"
+                className="input"
+                value={callbackDate}
+                onChange={(e) => setCallbackDate(e.target.value)}
+              />
+            </Field>
+            <Field label="Motivo/nota richiamo (facoltativo)">
+              <input
+                className="input"
+                value={callbackNote}
+                onChange={(e) => setCallbackNote(e.target.value)}
+                placeholder="Es. Richiamare per confermare offerta"
+              />
+            </Field>
+          </div>
+        </div>
 
         <Field label="Fase pipeline">
           <select
