@@ -130,7 +130,13 @@ export default function Statistiche() {
     const allRows = [...rows.values()];
     if (noneRow.totale > 0 || noneRow.positivoNuovo > 0 || noneRow.positivoRinnovo > 0) allRows.push(noneRow);
     return allRows
-      .map((r) => ({ ...r, positivoImporto: r.positivoNuovo + r.positivoRinnovo }))
+      .map((r) => ({
+        ...r,
+        positivoImporto: r.positivoNuovo + r.positivoRinnovo,
+        // Svolti a cui non è stato assegnato un esito (positivo/negativo/pending):
+        // appuntamenti "fissati" ed effettivamente svolti, ma non collegati a un esito.
+        nonCollegato: Math.max(r.svolti - r.positivo - r.negativo - r.pending, 0),
+      }))
       .filter((r) => r.totale > 0 || r.positivoImporto > 0);
   }, [appointments, contracts, operators]);
 
@@ -147,6 +153,7 @@ export default function Statistiche() {
         acc.positivoImporto += r.positivoImporto;
         acc.negativo += r.negativo;
         acc.pending += r.pending;
+        acc.nonCollegato += r.nonCollegato;
         return acc;
       },
       {
@@ -160,9 +167,24 @@ export default function Statistiche() {
         positivoImporto: 0,
         negativo: 0,
         pending: 0,
+        nonCollegato: 0,
       }
     );
   }, [perOperator]);
+
+  // Percentuali degli esiti calcolate sugli appuntamenti "fissati" ed effettivamente
+  // svolti nel mese (esclusi quelli ancora futuri/da fare, che non hanno un esito).
+  const esitiPercent = useMemo(() => {
+    const base = totals.svolti || 0;
+    const pct = (n) => (base > 0 ? Math.round((n / base) * 100) : 0);
+    return {
+      base,
+      positivo: pct(totals.positivo),
+      negativo: pct(totals.negativo),
+      pending: pct(totals.pending),
+      nonCollegato: pct(totals.nonCollegato),
+    };
+  }, [totals]);
 
   const productLineBreakdown = useMemo(() => {
     const byLine = new Map();
@@ -231,6 +253,56 @@ export default function Statistiche() {
               tone={totals.nonEffettuato + totals.daRifissare > 0 ? "warning" : "default"}
             />
           </div>
+
+          {esitiPercent.base > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-navy-700">Distribuzione esiti sugli appuntamenti svolti</p>
+              <p className="text-xs text-slate-400 mt-0.5 mb-3">
+                Percentuali calcolate sui {esitiPercent.base} appuntamenti fissati e svolti nel mese (esclusi quelli
+                ancora futuri da fare).
+              </p>
+              <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 gap-0.5 mb-3">
+                {totals.positivo > 0 && (
+                  <div className="bg-emerald-500" style={{ width: `${esitiPercent.positivo}%` }} />
+                )}
+                {totals.negativo > 0 && <div className="bg-rose-500" style={{ width: `${esitiPercent.negativo}%` }} />}
+                {totals.pending > 0 && <div className="bg-slate-400" style={{ width: `${esitiPercent.pending}%` }} />}
+                {totals.nonCollegato > 0 && (
+                  <div className="bg-amber-500" style={{ width: `${esitiPercent.nonCollegato}%` }} />
+                )}
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="text-slate-600">
+                    Positivo <span className="font-semibold text-slate-800">{esitiPercent.positivo}%</span>{" "}
+                    <span className="text-slate-400">({totals.positivo})</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+                  <span className="text-slate-600">
+                    Negativo <span className="font-semibold text-slate-800">{esitiPercent.negativo}%</span>{" "}
+                    <span className="text-slate-400">({totals.negativo})</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
+                  <span className="text-slate-600">
+                    Pending <span className="font-semibold text-slate-800">{esitiPercent.pending}%</span>{" "}
+                    <span className="text-slate-400">({totals.pending})</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                  <span className="text-slate-600">
+                    Non collegati <span className="font-semibold text-slate-800">{esitiPercent.nonCollegato}%</span>{" "}
+                    <span className="text-slate-400">({totals.nonCollegato})</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
