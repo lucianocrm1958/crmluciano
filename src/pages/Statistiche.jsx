@@ -133,9 +133,9 @@ export default function Statistiche() {
       .map((r) => ({
         ...r,
         positivoImporto: r.positivoNuovo + r.positivoRinnovo,
-        // Svolti a cui non è stato assegnato un esito (positivo/negativo/pending):
-        // appuntamenti "fissati" ed effettivamente svolti, ma non collegati a un esito.
-        nonCollegato: Math.max(r.svolti - r.positivo - r.negativo - r.pending, 0),
+        // Appuntamenti fissati ma non effettivamente tenuti (non effettuato o da rifissare):
+        // non hanno un esito di vendita collegato.
+        nonCollegato: r.nonEffettuato + r.daRifissare,
       }))
       .filter((r) => r.totale > 0 || r.positivoImporto > 0);
   }, [appointments, contracts, operators]);
@@ -172,10 +172,10 @@ export default function Statistiche() {
     );
   }, [perOperator]);
 
-  // Percentuali degli esiti calcolate sugli appuntamenti "fissati" ed effettivamente
-  // svolti nel mese (esclusi quelli ancora futuri/da fare, che non hanno un esito).
+  // Percentuali calcolate sugli appuntamenti "fissati" già passati nel mese (svolti,
+  // non effettuati e da rifissare), esclusi quelli ancora futuri/da fare.
   const esitiPercent = useMemo(() => {
-    const base = totals.svolti || 0;
+    const base = totals.svolti + totals.nonEffettuato + totals.daRifissare || 0;
     const pct = (n) => (base > 0 ? Math.round((n / base) * 100) : 0);
     return {
       base,
@@ -258,8 +258,8 @@ export default function Statistiche() {
             <div className="bg-white border border-slate-200 rounded-xl p-4">
               <p className="text-sm font-semibold text-navy-700">Distribuzione esiti sugli appuntamenti svolti</p>
               <p className="text-xs text-slate-400 mt-0.5 mb-3">
-                Percentuali calcolate sui {esitiPercent.base} appuntamenti fissati e svolti nel mese (esclusi quelli
-                ancora futuri da fare).
+                Percentuali calcolate sui {esitiPercent.base} appuntamenti fissati nel mese e già passati (svolti, non
+                effettuati o da rifissare), esclusi quelli ancora futuri da fare.
               </p>
               <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 gap-0.5 mb-3">
                 {totals.positivo > 0 && (
