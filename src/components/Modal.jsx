@@ -16,17 +16,14 @@ export default function Modal({ title, onClose, children, footer, wide = false }
             </button>
           </div>
           <div className="px-5 py-4">{children}</div>
-          {/* Il pulsante Salva (e gli altri pulsanti di azione) resta sempre "agganciato"
-              al fondo dello schermo mentre si scorre, invece di trovarsi in fondo a un
-              modulo lungo dove su alcuni telefoni non si vedeva più — soprattutto
-              scrivendo nelle note con la tastiera aperta. Qui si fa scorrere l'intera
-              finestra (non un riquadro interno con un'altezza calcolata a parte), che è
-              un comportamento molto più affidabile su tutti i browser e telefoni. */}
-          {footer && (
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-5 py-3">
-              {footer}
-            </div>
-          )}
+          {/* Il pulsante Salva (e gli altri pulsanti di azione) è qui in fondo, come parte
+              normale della pagina, invece che "agganciato" (sticky) allo schermo: su
+              Android, quando si apre la tastiera per scrivere nelle note, il pulsante
+              agganciato spariva e non tornava più visibile nemmeno chiudendo la tastiera
+              (un problema noto di alcuni browser mobili con questo tipo di posizionamento).
+              In questo modo il pulsante c'è sempre: basta chiudere la tastiera e scorrere
+              fino in fondo al modulo per trovarlo, in modo affidabile su ogni telefono. */}
+          {footer && <div className="border-t border-slate-200 px-5 py-3">{footer}</div>}
         </div>
       </div>
     </div>
