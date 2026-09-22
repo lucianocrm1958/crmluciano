@@ -382,23 +382,28 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                 {selectedContact.company && <p className="text-xs text-slate-500">{selectedContact.company}</p>}
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                   {selectedContact.phone ? (
-                    
-                      href={buildPhoneLink(selectedContact.phone)}
-                      className="flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700"
-                    >
-                      <Phone size={11} /> {selectedContact.phone}
-                    </a>
+                    createElement(
+                      "a",
+                      {
+                        href: buildPhoneLink(selectedContact.phone),
+                        className: "flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700",
+                      },
+                      createElement(Phone, { size: 11 }),
+                      " " + selectedContact.phone
+                    )
                   ) : (
                     <span className="text-xs text-slate-400">Nessun telefono in anagrafica</span>
                   )}
-                  {selectedContact.email && (
-                    
-                      href={buildEmailLink(selectedContact.email)}
-                      className="flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700"
-                    >
-                      <Mail size={11} /> {selectedContact.email}
-                    </a>
-                  )}
+                  {selectedContact.email &&
+                    createElement(
+                      "a",
+                      {
+                        href: buildEmailLink(selectedContact.email),
+                        className: "flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700",
+                      },
+                      createElement(Mail, { size: 11 }),
+                      " " + selectedContact.email
+                    )}
                 </div>
               </div>
               {!isEdit && (
