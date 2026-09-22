@@ -2,8 +2,9 @@ import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Modal from "./Modal";
 import ContactEmailLog from "./ContactEmailLog";
+import AppointmentForm from "./AppointmentForm";
 import { useSettings } from "../lib/useSettings";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, CalendarPlus } from "lucide-react";
 
 const emptyForm = {
   first_name: "",
@@ -65,6 +66,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
   const [lostReasonId, setLostReasonId] = useState(contact?.lost_reason_id || "");
   const [callbackDate, setCallbackDate] = useState("");
   const [callbackNote, setCallbackNote] = useState("");
+  const [appointmentFormOpen, setAppointmentFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
@@ -304,6 +306,21 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           </select>
         </Field>
 
+        {isEdit && (
+          <div className="bg-navy-50 border border-navy-100 rounded-lg p-3 flex items-center justify-between gap-3">
+            <p className="text-xs text-navy-700">
+              Il cliente ha fissato un appuntamento? Registralo subito, senza dover andare in "Appuntamenti".
+            </p>
+            <button
+              type="button"
+              onClick={() => setAppointmentFormOpen(true)}
+              className="shrink-0 flex items-center gap-1.5 text-xs font-medium bg-navy-600 hover:bg-navy-700 text-white px-3 py-1.5 rounded-lg"
+            >
+              <CalendarPlus size={14} /> Fissa appuntamento
+            </button>
+          </div>
+        )}
+
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
           <p className="text-xs text-amber-700">
             Se il cliente ti ha chiesto di essere richiamato, indica qui la data: al salvataggio verrà creato
@@ -450,6 +467,17 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           </div>
         </div>
       </form>
+
+      {appointmentFormOpen && (
+        <AppointmentForm
+          presetContact={contact}
+          onClose={() => setAppointmentFormOpen(false)}
+          onSaved={() => {
+            setAppointmentFormOpen(false);
+            onSaved?.();
+          }}
+        />
+      )}
     </Modal>
   );
 }
