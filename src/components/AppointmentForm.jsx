@@ -365,8 +365,46 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   }
 
   return (
-    <Modal title={isEdit ? "Modifica appuntamento" : "Nuovo appuntamento"} onClose={onClose} wide>
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Modal
+      title={isEdit ? "Modifica appuntamento" : "Nuovo appuntamento"}
+      onClose={onClose}
+      wide
+      footer={
+        <div className="flex items-center justify-between">
+          <div>
+            {isEdit && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center gap-1.5 text-sm text-rose-600 hover:text-rose-700 disabled:opacity-50"
+              >
+                <Trash2 size={15} /> {deleting ? "Eliminazione..." : "Elimina appuntamento"}
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >
+              Annulla
+            </button>
+            <button
+              type="submit"
+              form="appointment-form"
+              disabled={saving}
+              className="px-4 py-2 text-sm rounded-lg bg-navy-600 text-white hover:bg-navy-700 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving ? "Salvataggio..." : "Salva"}
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <form id="appointment-form" onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{error}</div>
         )}
@@ -764,37 +802,6 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
           />
         </label>
 
-        <div className="flex items-center justify-between pt-2">
-          <div>
-            {isEdit && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={deleting}
-                className="flex items-center gap-1.5 text-sm text-rose-600 hover:text-rose-700 disabled:opacity-50"
-              >
-                <Trash2 size={15} /> {deleting ? "Eliminazione..." : "Elimina appuntamento"}
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-            >
-              Annulla
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 text-sm rounded-lg bg-navy-600 text-white hover:bg-navy-700 disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {saving && <Loader2 size={14} className="animate-spin" />}
-              {saving ? "Salvataggio..." : "Salva"}
-            </button>
-          </div>
-        </div>
       </form>
     </Modal>
   );
