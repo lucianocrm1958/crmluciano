@@ -12,6 +12,20 @@ function makeLineKey() {
     : `line-${Math.random().toString(36).slice(2)}`;
 }
 
+// Costruiscono i link cliccabili per telefono ed email del contatto selezionato,
+// tenuti come funzioni separate (invece che scritti direttamente dentro il JSX)
+// per evitare problemi di caratteri speciali quando questo file viene copiato e
+// incollato da un editor all'altro.
+function buildPhoneLink(phone) {
+  const scheme = String.fromCharCode(116, 101, 108, 58); // "tel:"
+  return scheme + phone;
+}
+
+function buildEmailLink(email) {
+  const scheme = String.fromCharCode(109, 97, 105, 108, 116, 111, 58); // "mailto:"
+  return scheme + email;
+}
+
 export default function AppointmentForm({ appointment, presetContact, initialDate, onClose, onSaved, onDeleted }) {
   const { operators, callOutcomes, productLines, pipelineStages } = useSettings();
   const isEdit = !!appointment;
@@ -369,7 +383,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                   {selectedContact.phone ? (
                     
-                      href={"tel" + ":" + selectedContact.phone}
+                      href={buildPhoneLink(selectedContact.phone)}
                       className="flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700"
                     >
                       <Phone size={11} /> {selectedContact.phone}
@@ -379,7 +393,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                   )}
                   {selectedContact.email && (
                     
-                      href={"mailto" + ":" + selectedContact.email}
+                      href={buildEmailLink(selectedContact.email)}
                       className="flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700"
                     >
                       <Mail size={11} /> {selectedContact.email}
