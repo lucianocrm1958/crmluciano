@@ -129,7 +129,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     (async () => {
       const { data, error: err } = await supabase
         .from("contracts")
-        .select("id, contract_type, product_line_id, amount, excess_new_amount")
+        .select("id, contract_type, product_line_id, amount, excess_new_amount, start_date")
         .eq("appointment_id", appointment.id);
       if (cancelled) return;
       if (!err && data && data.length > 0) {
@@ -141,6 +141,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             productLineId: c.product_line_id || "",
             amount: c.amount ?? "",
             excessAmount: c.excess_new_amount ?? "",
+            startDate: c.start_date || date,
           }))
         );
       } else if (!err && appointment.result === "positivo" && appointment.result_amount) {
@@ -154,6 +155,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             productLineId: appointment.result_product_line_id || "",
             amount: appointment.result_amount,
             excessAmount: "",
+            startDate: date,
           },
         ]);
       }
@@ -170,7 +172,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     if (!linesReady) return;
     if (result === "positivo" && resultLines.length === 0) {
       setResultLines([
-        { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "", excessAmount: "" },
+        { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "", excessAmount: "", startDate: date },
       ]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,7 +181,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   function addResultLine() {
     setResultLines((lines) => [
       ...lines,
-      { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "", excessAmount: "" },
+      { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "", excessAmount: "", startDate: date },
     ]);
   }
 
@@ -250,7 +252,10 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         amount: Number(line.amount),
         excess_new_amount:
           line.contractType === "rinnovo" && line.excessAmount !== "" ? Number(line.excessAmount) : null,
-        start_date: date,
+        // La decorrenza del contratto (quindi il mese in cui l'importo conta nelle Statistiche
+        // come fatturato) può essere diversa dalla data dell'appuntamento: se l'utente non la
+        // cambia resta uguale alla data dell'appuntamento, come prima.
+        start_date: line.startDate || date,
         operator_id: operatorId || null,
       };
 
@@ -743,6 +748,22 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                                   </option>
                                 ))}
                               </select>
+                            </label>
+                            <label className="block col-span-2">
+                              <span className="block text-[11px] text-slate-400 mb-0.5">
+                                Decorrenza fatturato (mese in cui l'importo conta nelle Statistiche)
+                              </span>
+                              <input
+                                type="date"
+                                className="input"
+                                value={line.startDate || ""}
+                                onChange={(e) => updateResultLine(line.key, "startDate", e.target.value)}
+                              />
+                              <span className="block text-[11px] text-slate-400 mt-0.5">
+                                Di norma è la data dell'appuntamento. Cambiala solo se il contratto deve essere
+                                conteggiato nel fatturato di un mese diverso (es. il mese successivo): l'appuntamento
+                                resterà comunque conteggiato in questo mese.
+                              </span>
                             </label>
                             {line.contractType === "rinnovo" && (
                               <label className="block col-span-2">
