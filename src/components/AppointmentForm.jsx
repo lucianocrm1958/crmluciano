@@ -369,7 +369,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                   {selectedContact.phone ? (
                     
-                      href={"tel:" + selectedContact.phone}
+                      href={"tel" + ":" + selectedContact.phone}
                       className="flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700"
                     >
                       <Phone size={11} /> {selectedContact.phone}
@@ -379,7 +379,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                   )}
                   {selectedContact.email && (
                     
-                      href={"mailto:" + selectedContact.email}
+                      href={"mailto" + ":" + selectedContact.email}
                       className="flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700"
                     >
                       <Mail size={11} /> {selectedContact.email}
