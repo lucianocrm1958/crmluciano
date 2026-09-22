@@ -2,7 +2,7 @@ import { createElement, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
-import { Loader2, Trash2, Search, UserPlus, X, MapPin, Plus, Phone, Mail } from "lucide-react";
+import { Loader2, Trash2, Search, UserPlus, X, MapPin, Plus, Phone, Mail, Clock, AlertTriangle } from "lucide-react";
 
 // Genera una chiave locale univoca per ogni riga prodotto dell'esito positivo,
 // prima ancora che venga salvata come contratto (che avrà un id vero del database).
@@ -71,6 +71,12 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [searchingAddress, setSearchingAddress] = useState(false);
   const [addressFocused, setAddressFocused] = useState(false);
 
+  // Altri appuntamenti già fissati nello stesso giorno, per poterli vedere subito
+  // (senza dover uscire e andare su "Appuntamenti") mentre si sceglie data e ora,
+  // così è facile accorgersi se uno slot è già occupato.
+  const [dayAppointments, setDayAppointments] = useState([]);
+  const [loadingDayAppointments, setLoadingDayAppointments] = useState(false);
+
   // Autocomplete indirizzo tramite Nominatim (OpenStreetMap) — gratuito, senza chiave API.
   // Cerca solo su via/piazza + città: il numero civico resta sempre un campo separato,
   // così non viene mai sovrascritto da un suggerimento che non lo contiene.
@@ -117,6 +123,40 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     }, 300);
     return () => clearTimeout(t);
   }, [contactSearch]);
+
+  // Ricarica gli appuntamenti già presenti in agenda per il giorno selezionato, per
+  // poter segnalare subito eventuali orari già occupati (vedi dayAppointments sopra).
+  useEffect(() => {
+    if (!date) {
+      setDayAppointments([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingDayAppointments(true);
+    (async () => {
+      let query = supabase
+        .from("appointments")
+        .select("id, appointment_time, mode, status, contacts(first_name, last_name, company)")
+        .eq("appointment_date", date)
+        .order("appointment_time", { ascending: true });
+      if (isEdit && appointment?.id) {
+        query = query.neq("id", appointment.id);
+      }
+      const { data, error: err } = await query;
+      if (cancelled) return;
+      if (err) {
+        console.error(err);
+        setDayAppointments([]);
+      } else {
+        setDayAppointments(data || []);
+      }
+      setLoadingDayAppointments(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
   // Per un appuntamento già salvato, recupera gli eventuali contratti già collegati
   // (uno per prodotto venduto), per precompilare le righe dell'esito positivo.
@@ -561,6 +601,48 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
           </label>
         </div>
 
+        {date && (
+          <div className="border border-slate-200 rounded-lg p-3">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500 mb-2">
+              <Clock size={13} /> Altri appuntamenti già fissati in questo giorno
+            </span>
+            {loadingDayAppointments ? (
+              <p className="text-xs text-slate-400 flex items-center gap-1">
+                <Loader2 size={12} className="animate-spin" /> Verifica agenda...
+              </p>
+            ) : dayAppointments.length === 0 ? (
+              <p className="text-xs text-slate-400">Nessun altro appuntamento in programma per questo giorno.</p>
+            ) : (
+              <ul className="space-y-1">
+                {dayAppointments.map((a) => {
+                  const aTime = a.appointment_time?.slice(0, 5) || "";
+                  const isConflict = aTime === time;
+                  return (
+                    <li
+                      key={a.id}
+                      className={`flex items-center justify-between gap-2 text-xs rounded-md px-2 py-1 ${
+                        isConflict ? "bg-amber-50 text-amber-700 border border-amber-200" : "text-slate-600"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        {isConflict && <AlertTriangle size={12} className="flex-shrink-0" />}
+                        <span className="font-medium flex-shrink-0">{aTime}</span>
+                        <span className="truncate">
+                          {a.contacts?.first_name} {a.contacts?.last_name || ""}
+                          {a.contacts?.company ? ` · ${a.contacts.company}` : ""}
+                        </span>
+                      </span>
+                      <span className="text-slate-400 flex-shrink-0">
+                        {a.mode === "online" ? "Online" : "In presenza"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
         <label className="block">
           <span className="block text-xs font-medium text-slate-500 mb-1">Modalità</span>
           <div className="flex gap-4">
@@ -706,146 +788,4 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                             )}
                           </div>
                           <div className="flex gap-4">
-                            <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                              <input
-                                type="radio"
-                                checked={line.contractType === "nuovo"}
-                                onChange={() => updateResultLine(line.key, "contractType", "nuovo")}
-                              />{" "}
-                              Nuovo
-                            </label>
-                            <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                              <input
-                                type="radio"
-                                checked={line.contractType === "rinnovo"}
-                                onChange={() => updateResultLine(line.key, "contractType", "rinnovo")}
-                              />{" "}
-                              Rinnovo
-                            </label>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <label className="block">
-                              <span className="block text-[11px] text-slate-400 mb-0.5">Importo (€) *</span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                className="input"
-                                value={line.amount}
-                                onChange={(e) => updateResultLine(line.key, "amount", e.target.value)}
-                              />
-                            </label>
-                            <label className="block">
-                              <span className="block text-[11px] text-slate-400 mb-0.5">Linea di prodotto</span>
-                              <select
-                                className="input"
-                                value={line.productLineId}
-                                onChange={(e) => updateResultLine(line.key, "productLineId", e.target.value)}
-                              >
-                                <option value="">—</option>
-                                {productLines.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="block col-span-2">
-                              <span className="block text-[11px] text-slate-400 mb-0.5">
-                                Decorrenza fatturato (mese in cui l'importo conta nelle Statistiche)
-                              </span>
-                              <input
-                                type="date"
-                                className="input"
-                                value={line.startDate || ""}
-                                onChange={(e) => updateResultLine(line.key, "startDate", e.target.value)}
-                              />
-                              <span className="block text-[11px] text-slate-400 mt-0.5">
-                                Di norma è la data dell'appuntamento. Cambiala solo se il contratto deve essere
-                                conteggiato nel fatturato di un mese diverso (es. il mese successivo): l'appuntamento
-                                resterà comunque conteggiato in questo mese.
-                              </span>
-                            </label>
-                            {line.contractType === "rinnovo" && (
-                              <label className="block col-span-2">
-                                <span className="block text-[11px] text-slate-400 mb-0.5">
-                                  di cui quota "Nuovo" (€) — solo se l'importo supera il precedente contratto
-                                </span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  className="input"
-                                  placeholder="Lascia vuoto se è un rinnovo pieno"
-                                  value={line.excessAmount}
-                                  onChange={(e) => updateResultLine(line.key, "excessAmount", e.target.value)}
-                                />
-                              </label>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={addResultLine}
-                      className="flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-700 font-medium"
-                    >
-                      <Plus size={13} /> Aggiungi un altro prodotto
-                    </button>
-                    <p className="text-xs text-slate-400">
-                      Il totale delle righe viene registrato automaticamente anche in "Contratti e fatturato" (una riga
-                      per ogni prodotto).
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        <label className="block">
-          <span className="block text-xs font-medium text-slate-500 mb-1">Operatore</span>
-          <select className="input" value={operatorId} onChange={(e) => setOperatorId(e.target.value)}>
-            <option value="">—</option>
-            {operators.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.initials} {o.name ? `· ${o.name}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="block text-xs font-medium text-slate-500 mb-1">Note / esito</span>
-          <textarea
-            className="input min-h-[70px]"
-            value={outcomeNotes}
-            onChange={(e) => setOutcomeNotes(e.target.value)}
-          />
-        </label>
-
-      </form>
-    </Modal>
-  );
-}
-
-// Unisce via/piazza e numero civico in un'unica stringa da salvare/aprire su mappa.
-function combineAddress(street, civico) {
-  const s = (street || "").trim();
-  const c = (civico || "").trim();
-  if (!s) return "";
-  return c ? `${s}, ${c}` : s;
-}
-
-// Riconosce, per un appuntamento già salvato, l'eventuale numero civico finale
-// (es. "15", "15/A", "15 bis") e lo separa dal resto dell'indirizzo, per poter
-// precompilare i due campi separati in modifica. Se non lo trova, il civico
-// resta vuoto e l'intera stringa va nel campo via/piazza.
-function splitAddress(fullAddress) {
-  const value = (fullAddress || "").trim();
-  if (!value) return { street: "", civico: "" };
-  const match = value.match(/^(.*?),?\s*(\d+\s*[a-zA-Z]?(?:\s*\/\s*[a-zA-Z0-9]+)?)$/);
-  if (match && match[1].trim()) {
-    return { street: match[1].trim(), civico: match[2].trim() };
-  }
-  return { street: value, civico: "" };
-}
+                            <label
