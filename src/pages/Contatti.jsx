@@ -62,7 +62,7 @@ export default function Contatti() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contacts]);
+  }, [contacts, searchParams]);
 
   const listNames = useMemo(() => {
     const names = new Set(contacts.map((c) => c.list_name).filter(Boolean));
