@@ -354,11 +354,27 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
 
     // Come quando si crea un contratto a mano: la trattativa è vinta, quindi il
     // contatto passa automaticamente sulla fase "Chiuso vinto" della pipeline.
+    // Aggiorna anche il valore stimato e la linea di prodotto del contatto con i
+    // dati appena inseriti nell'esito positivo: la pagina Pipeline (sia il totale
+    // per fase che il riepilogo "Pipeline per linea di prodotto") legge infatti
+    // questi due campi del contatto, non i contratti collegati, quindi senza
+    // questo aggiornamento restava con i vecchi importi/prodotti anche dopo aver
+    // registrato l'esito.
     const wonStage = pipelineStages.find((s) => s.name === "Chiuso vinto");
     if (wonStage) {
+      const totalAmount = validLines.reduce((sum, l) => sum + Number(l.amount), 0);
+      let topLine = null;
+      for (const line of validLines) {
+        if (!topLine || Number(line.amount) > Number(topLine.amount)) topLine = line;
+      }
       const { error: stageErr } = await supabase
         .from("contacts")
-        .update({ pipeline_stage_id: wonStage.id, updated_at: new Date().toISOString() })
+        .update({
+          pipeline_stage_id: wonStage.id,
+          estimated_value: totalAmount,
+          estimated_product_line_id: topLine?.productLineId || null,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", selectedContact.id);
       if (stageErr) console.error(stageErr);
     }
@@ -941,49 +957,4 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         )}
 
         <label className="block">
-          <span className="block text-xs font-medium text-slate-500 mb-1">Operatore</span>
-          <select className="input" value={operatorId} onChange={(e) => setOperatorId(e.target.value)}>
-            <option value="">—</option>
-            {operators.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.initials} {o.name ? `· ${o.name}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="block text-xs font-medium text-slate-500 mb-1">Note / esito</span>
-          <textarea
-            className="input min-h-[70px]"
-            value={outcomeNotes}
-            onChange={(e) => setOutcomeNotes(e.target.value)}
-          />
-        </label>
-
-      </form>
-    </Modal>
-  );
-}
-
-// Unisce via/piazza e numero civico in un'unica stringa da salvare/aprire su mappa.
-function combineAddress(street, civico) {
-  const s = (street || "").trim();
-  const c = (civico || "").trim();
-  if (!s) return "";
-  return c ? `${s}, ${c}` : s;
-}
-
-// Riconosce, per un appuntamento già salvato, l'eventuale numero civico finale
-// (es. "15", "15/A", "15 bis") e lo separa dal resto dell'indirizzo, per poter
-// precompilare i due campi separati in modifica. Se non lo trova, il civico
-// resta vuoto e l'intera stringa va nel campo via/piazza.
-function splitAddress(fullAddress) {
-  const value = (fullAddress || "").trim();
-  if (!value) return { street: "", civico: "" };
-  const match = value.match(/^(.*?),?\s*(\d+\s*[a-zA-Z]?(?:\s*\/\s*[a-zA-Z0-9]+)?)$/);
-  if (match && match[1].trim()) {
-    return { street: match[1].trim(), civico: match[2].trim() };
-  }
-  return { street: value, civico: "" };
-}
+          <span className="block text-xs font-medium text-slate-500
