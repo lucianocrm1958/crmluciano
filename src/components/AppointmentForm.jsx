@@ -77,6 +77,10 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [dayAppointments, setDayAppointments] = useState([]);
   const [loadingDayAppointments, setLoadingDayAppointments] = useState(false);
 
+  // Fasce orarie segnate come "indisponibili" (vedi Calendario) nello stesso giorno,
+  // mostrate insieme agli altri appuntamenti così anche queste si vedono subito.
+  const [dayUnavailability, setDayUnavailability] = useState([]);
+
   // Autocomplete indirizzo tramite Nominatim (OpenStreetMap) — gratuito, senza chiave API.
   // Cerca solo su via/piazza + città: il numero civico resta sempre un campo separato,
   // così non viene mai sovrascritto da un suggerimento che non lo contiene.
@@ -156,6 +160,33 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
+
+  // Ricarica anche le fasce orarie segnate come "indisponibili" per lo stesso giorno
+  // (vedi dayUnavailability sopra), così compaiono insieme agli altri appuntamenti.
+  useEffect(() => {
+    if (!date) {
+      setDayUnavailability([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error: err } = await supabase
+        .from("unavailability_blocks")
+        .select("id, start_time, end_time, reason")
+        .eq("block_date", date)
+        .order("start_time", { ascending: true });
+      if (cancelled) return;
+      if (err) {
+        console.error(err);
+        setDayUnavailability([]);
+      } else {
+        setDayUnavailability(data || []);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [date]);
 
   // Per un appuntamento già salvato, recupera gli eventuali contratti già collegati
@@ -638,6 +669,33 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                 })}
               </ul>
             )}
+          </div>
+        )}
+
+        {date && dayUnavailability.length > 0 && (
+          <div className="border border-rose-200 bg-rose-50/50 rounded-lg p-3">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-rose-700 mb-2">
+              <AlertTriangle size={13} /> Fasce orarie segnate come non disponibili in questo giorno
+            </span>
+            <ul className="space-y-1">
+              {dayUnavailability.map((u) => {
+                const uStart = u.start_time?.slice(0, 5) || "";
+                const uEnd = u.end_time?.slice(0, 5) || "";
+                const isConflict = !!time && time >= uStart && time < uEnd;
+                const liClassName =
+                  "flex items-center gap-2 text-xs rounded-md px-2 py-1 " +
+                  (isConflict ? "bg-rose-100 text-rose-800 border border-rose-300 font-medium" : "text-rose-700");
+                return (
+                  <li key={u.id} className={liClassName}>
+                    {isConflict && <AlertTriangle size={12} className="flex-shrink-0" />}
+                    <span className="flex-shrink-0">
+                      {uStart}–{uEnd}
+                    </span>
+                    {u.reason && <span className="truncate">· {u.reason}</span>}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         )}
 
