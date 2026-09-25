@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { supabase } from "../lib/supabaseClient";
 import {
   LayoutDashboard,
   Users,
@@ -9,6 +10,7 @@ import {
   Archive,
   Settings,
   BarChart3,
+  LogOut,
   X,
 } from "lucide-react";
 
@@ -78,8 +80,15 @@ export default function Sidebar({ open, onClose }) {
           ))}
         </nav>
 
-        <div className="px-5 py-4 border-t border-navy-600/60 text-navy-400 text-xs">
-          CRM personale · uso interno
+        <div className="px-3 py-4 border-t border-navy-600/60">
+          <button
+            type="button"
+            onClick={() => supabase.auth.signOut()}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-navy-200 hover:bg-navy-600/60 hover:text-white transition-colors"
+          >
+            <LogOut size={18} strokeWidth={2} /> Esci
+          </button>
+          <p className="text-navy-400 text-xs mt-3 px-3">CRM personale · uso interno</p>
         </div>
       </aside>
     </>
