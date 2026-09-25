@@ -957,4 +957,49 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         )}
 
         <label className="block">
-          <span className="block text-xs font-medium text-slate-500
+          <span className="block text-xs font-medium text-slate-500 mb-1">Operatore</span>
+          <select className="input" value={operatorId} onChange={(e) => setOperatorId(e.target.value)}>
+            <option value="">—</option>
+            {operators.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.initials} {o.name ? `· ${o.name}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="block text-xs font-medium text-slate-500 mb-1">Note / esito</span>
+          <textarea
+            className="input min-h-[70px]"
+            value={outcomeNotes}
+            onChange={(e) => setOutcomeNotes(e.target.value)}
+          />
+        </label>
+
+      </form>
+    </Modal>
+  );
+}
+
+// Unisce via/piazza e numero civico in un'unica stringa da salvare/aprire su mappa.
+function combineAddress(street, civico) {
+  const s = (street || "").trim();
+  const c = (civico || "").trim();
+  if (!s) return "";
+  return c ? `${s}, ${c}` : s;
+}
+
+// Riconosce, per un appuntamento già salvato, l'eventuale numero civico finale
+// (es. "15", "15/A", "15 bis") e lo separa dal resto dell'indirizzo, per poter
+// precompilare i due campi separati in modifica. Se non lo trova, il civico
+// resta vuoto e l'intera stringa va nel campo via/piazza.
+function splitAddress(fullAddress) {
+  const value = (fullAddress || "").trim();
+  if (!value) return { street: "", civico: "" };
+  const match = value.match(/^(.*?),?\s*(\d+\s*[a-zA-Z]?(?:\s*\/\s*[a-zA-Z0-9]+)?)$/);
+  if (match && match[1].trim()) {
+    return { street: match[1].trim(), civico: match[2].trim() };
+  }
+  return { street: value, civico: "" };
+}
