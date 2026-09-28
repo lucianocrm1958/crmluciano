@@ -57,19 +57,28 @@ export default function Pipeline() {
     [noStageContacts]
   );
 
+  // Id delle fasi "chiuse" (vinto/perso), per escluderle dai totali che devono
+  // rappresentare solo le trattative ancora aperte (stessa regola della Dashboard).
+  const closedStageIds = useMemo(
+    () => new Set(pipelineStages.filter((s) => CLOSED_STAGE_NAMES.includes(s.name)).map((s) => s.id)),
+    [pipelineStages]
+  );
+
   const productLineBreakdown = useMemo(() => {
     const map = new Map();
-    contacts.forEach((c) => {
-      const name = c.product_lines?.name || NO_PRODUCT_LINE_LABEL;
-      const value = Number(c.estimated_value) || 0;
-      map.set(name, (map.get(name) || 0) + value);
-    });
+    contacts
+      .filter((c) => !closedStageIds.has(c.pipeline_stage_id))
+      .forEach((c) => {
+        const name = c.product_lines?.name || NO_PRODUCT_LINE_LABEL;
+        const value = Number(c.estimated_value) || 0;
+        map.set(name, (map.get(name) || 0) + value);
+      });
     const total = Array.from(map.values()).reduce((sum, v) => sum + v, 0);
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value, pct: total > 0 ? Math.round((value / total) * 100) : 0 }))
       .filter((p) => p.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [contacts]);
+  }, [contacts, closedStageIds]);
 
   function contactsForStage(stageId) {
     return contacts.filter((c) => c.pipeline_stage_id === stageId);
