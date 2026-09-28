@@ -52,6 +52,11 @@ export default function Pipeline() {
     [contacts]
   );
 
+  const noStageValue = useMemo(
+    () => noStageContacts.reduce((sum, c) => sum + (Number(c.estimated_value) || 0), 0),
+    [noStageContacts]
+  );
+
   const productLineBreakdown = useMemo(() => {
     const map = new Map();
     contacts.forEach((c) => {
@@ -148,7 +153,8 @@ export default function Pipeline() {
 
       {noStageContacts.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg px-4 py-2.5">
-          {noStageContacts.length} contatti senza fase assegnata — apri il contatto e assegna una fase pipeline per vederlo qui.
+          {noStageContacts.length} contatti senza fase assegnata
+          {noStageValue > 0 ? ` (valore stimato: ${formatCurrency(noStageValue)})` : ""} — apri il contatto e assegna una fase pipeline per vederlo qui.
         </div>
       )}
 
@@ -242,4 +248,3 @@ export default function Pipeline() {
     </div>
   );
 }
-
