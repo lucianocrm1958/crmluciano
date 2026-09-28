@@ -2,6 +2,7 @@ import { createElement, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
+import ContactEmailLog from "./ContactEmailLog";
 import { Loader2, Trash2, Search, UserPlus, X, MapPin, Plus, Phone, Mail, Clock, AlertTriangle, Pencil } from "lucide-react";
 
 // Genera una chiave locale univoca per ogni riga prodotto dell'esito positivo,
@@ -763,6 +764,8 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             </div>
           )}
         </div>
+
+        {selectedContact && <ContactEmailLog contactId={selectedContact.id} />}
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
