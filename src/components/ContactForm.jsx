@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Modal from "./Modal";
 import ContactEmailLog from "./ContactEmailLog";
+import AppointmentHistory from "./AppointmentHistory";
 import AppointmentForm from "./AppointmentForm";
 import { useSettings } from "../lib/useSettings";
 import { Loader2, Trash2, CalendarPlus } from "lucide-react";
@@ -432,6 +433,8 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
             onChange={(e) => update("notes", e.target.value)}
           />
         </Field>
+
+        {isEdit && <AppointmentHistory contactId={contact.id} />}
 
         {isEdit && <ContactEmailLog contactId={contact.id} />}
 
