@@ -2,7 +2,7 @@ import { createElement, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
-import { Loader2, Trash2, Search, UserPlus, X, MapPin, Plus, Phone, Mail, Clock, AlertTriangle } from "lucide-react";
+import { Loader2, Trash2, Search, UserPlus, X, MapPin, Plus, Phone, Mail, Clock, AlertTriangle, Pencil } from "lucide-react";
 
 // Genera una chiave locale univoca per ogni riga prodotto dell'esito positivo,
 // prima ancora che venga salvata come contratto (che avrà un id vero del database).
@@ -43,6 +43,15 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [quickLastName, setQuickLastName] = useState("");
   const [quickCompany, setQuickCompany] = useState("");
   const [quickPhone, setQuickPhone] = useState("");
+  const [quickEmail, setQuickEmail] = useState("");
+
+  // Modifica rapida di telefono, email e nota generale del contatto già selezionato,
+  // direttamente da qui, senza dover uscire e aprire la scheda del contatto in Contatti.
+  const [editingContactInfo, setEditingContactInfo] = useState(false);
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [savingContactInfo, setSavingContactInfo] = useState(false);
 
   const [date, setDate] = useState(
     appointment?.appointment_date || initialDate || new Date().toISOString().slice(0, 10)
@@ -119,7 +128,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
       const term = `%${contactSearch.trim()}%`;
       const { data } = await supabase
         .from("contacts")
-        .select("id, first_name, last_name, company, phone, email")
+        .select("id, first_name, last_name, company, phone, email, notes")
         .or(`first_name.ilike.${term},last_name.ilike.${term},company.ilike.${term}`)
         .limit(8);
       setContactResults(data || []);
@@ -278,6 +287,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         last_name: quickLastName.trim() || null,
         company: quickCompany.trim() || null,
         phone: quickPhone.trim() || null,
+        email: quickEmail.trim() || null,
         status: "attivo",
       })
       .select()
@@ -290,6 +300,32 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     }
     setSelectedContact(data);
     setQuickAddOpen(false);
+  }
+
+  // Salva telefono, email e nota generale del contatto selezionato direttamente
+  // nell'anagrafica (tabella contacts), senza passare dalla pagina Contatti.
+  async function handleSaveContactInfo() {
+    setSavingContactInfo(true);
+    setError(null);
+    const { data, error: err } = await supabase
+      .from("contacts")
+      .update({
+        phone: editPhone.trim() || null,
+        email: editEmail.trim() || null,
+        notes: editNotes.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedContact.id)
+      .select()
+      .single();
+    setSavingContactInfo(false);
+    if (err) {
+      console.error(err);
+      setError("Non sono riuscito ad aggiornare i dati del contatto.");
+      return;
+    }
+    setSelectedContact((prev) => ({ ...prev, ...data }));
+    setEditingContactInfo(false);
   }
 
   // Crea, aggiorna o rimuove i contratti collegati a questo appuntamento (uno per riga
@@ -496,7 +532,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         </div>
       }
     >
-      <form id="appointment-form" onSubmit={handleSubmit} className="space-y-4">
+            <form id="appointment-form" onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{error}</div>
         )}
@@ -504,46 +540,130 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         <div>
           <span className="block text-xs font-medium text-slate-500 mb-1">Contatto *</span>
           {selectedContact ? (
-            <div className="flex items-center justify-between bg-navy-50 border border-navy-100 rounded-lg px-3 py-2">
-              <div>
-                <p className="text-sm font-medium text-navy-700">
-                  {selectedContact.first_name} {selectedContact.last_name || ""}
-                </p>
-                {selectedContact.company && <p className="text-xs text-slate-500">{selectedContact.company}</p>}
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                  {selectedContact.phone ? (
-                    createElement(
-                      "a",
-                      {
-                        href: buildPhoneLink(selectedContact.phone),
-                        className: "flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700",
-                      },
-                      createElement(Phone, { size: 11 }),
-                      " " + selectedContact.phone
-                    )
-                  ) : (
-                    <span className="text-xs text-slate-400">Nessun telefono in anagrafica</span>
+            <div className="bg-navy-50 border border-navy-100 rounded-lg px-3 py-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-navy-700">
+                    {selectedContact.first_name} {selectedContact.last_name || ""}
+                  </p>
+                  {selectedContact.company && <p className="text-xs text-slate-500">{selectedContact.company}</p>}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {!editingContactInfo && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditPhone(selectedContact.phone || "");
+                        setEditEmail(selectedContact.email || "");
+                        setEditNotes(selectedContact.notes || "");
+                        setEditingContactInfo(true);
+                      }}
+                      className="text-slate-400 hover:text-navy-600"
+                      title="Modifica telefono, email e nota del contatto"
+                    >
+                      <Pencil size={14} />
+                    </button>
                   )}
-                  {selectedContact.email &&
-                    createElement(
-                      "a",
-                      {
-                        href: buildEmailLink(selectedContact.email),
-                        className: "flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700",
-                      },
-                      createElement(Mail, { size: 11 }),
-                      " " + selectedContact.email
-                    )}
+                  {!isEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedContact(null)}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
-              {!isEdit && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedContact(null)}
-                  className="text-slate-400 hover:text-slate-600"
-                >
-                  <X size={16} />
-                </button>
+
+              {editingContactInfo ? (
+                <div className="mt-2 space-y-2 border-t border-navy-100 pt-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="block text-[11px] text-slate-400 mb-0.5">Telefono</span>
+                      <input
+                        className="input"
+                        value={editPhone}
+                        onChange={(e) => setEditPhone(e.target.value)}
+                        placeholder="Es. 333 1234567"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-[11px] text-slate-400 mb-0.5">Email</span>
+                      <input
+                        type="email"
+                        className="input"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        placeholder="nome@esempio.it"
+                      />
+                    </label>
+                  </div>
+                  <label className="block">
+                    <span className="block text-[11px] text-slate-400 mb-0.5">Nota generale sul contatto</span>
+                    <textarea
+                      className="input min-h-[60px]"
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      placeholder="Es. preferisce essere contattato al mattino..."
+                    />
+                  </label>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setEditingContactInfo(false)}
+                      className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600"
+                    >
+                      Annulla
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveContactInfo}
+                      disabled={savingContactInfo}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-navy-600 text-white disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {savingContactInfo && <Loader2 size={12} className="animate-spin" />}
+                      {savingContactInfo ? "Salvataggio..." : "Salva"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Questi dati vengono salvati direttamente nell'anagrafica del contatto: li ritroverai anche in
+                    Contatti.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                    {selectedContact.phone ? (
+                      createElement(
+                        "a",
+                        {
+                          href: buildPhoneLink(selectedContact.phone),
+                          className: "flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700",
+                        },
+                        createElement(Phone, { size: 11 }),
+                        " " + selectedContact.phone
+                      )
+                    ) : (
+                      <span className="text-xs text-slate-400">Nessun telefono in anagrafica</span>
+                    )}
+                    {selectedContact.email &&
+                      createElement(
+                        "a",
+                        {
+                          href: buildEmailLink(selectedContact.email),
+                          className: "flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700",
+                        },
+                        createElement(Mail, { size: 11 }),
+                        " " + selectedContact.email
+                      )}
+                  </div>
+                  {selectedContact.notes && (
+                    <p className="text-xs text-slate-500 mt-1.5 whitespace-pre-wrap border-t border-navy-100 pt-1.5">
+                      {selectedContact.notes}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           ) : quickAddOpen ? (
@@ -573,6 +693,13 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                 placeholder="Telefono"
                 value={quickPhone}
                 onChange={(e) => setQuickPhone(e.target.value)}
+              />
+              <input
+                type="email"
+                className="input"
+                placeholder="Email"
+                value={quickEmail}
+                onChange={(e) => setQuickEmail(e.target.value)}
               />
               <div className="flex gap-2 justify-end">
                 <button
