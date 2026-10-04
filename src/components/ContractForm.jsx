@@ -1,176 +1,366 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { Plus, Pencil, Trash2, Check, X, Loader2 } from "lucide-react";
+import { useSettings } from "../lib/useSettings";
+import Modal from "./Modal";
+import { Loader2, Trash2, Search, UserPlus, X } from "lucide-react";
 
-// Gestione dei prodotti specifici (es. il nome della banca dati venduta),
-// raggruppati per linea di prodotto.
-export default function ProductsList({ products, productLines, onChange }) {
-  const [addingLineId, setAddingLineId] = useState(null);
-  const [newName, setNewName] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editName, setEditName] = useState("");
-  const [busyId, setBusyId] = useState(null);
+export default function ContractForm({ contract, presetContact, onClose, onSaved, onDeleted }) {
+  const { productLines, products, pipelineStages, operators, loading: settingsLoading } = useSettings();
+  const isEdit = !!contract;
+
+  const [selectedContact, setSelectedContact] = useState(
+    contract?.contacts ? { id: contract.contact_id, ...contract.contacts } : presetContact || null
+  );
+  const [contactSearch, setContactSearch] = useState("");
+  const [contactResults, setContactResults] = useState([]);
+  const [searchingContacts, setSearchingContacts] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickFirstName, setQuickFirstName] = useState("");
+  const [quickLastName, setQuickLastName] = useState("");
+  const [quickCompany, setQuickCompany] = useState("");
+
+  const [productLineId, setProductLineId] = useState(contract?.product_line_id || "");
+  const [productId, setProductId] = useState(contract?.product_id || "");
+  const [contractType, setContractType] = useState(contract?.contract_type || "nuovo");
+  const [amount, setAmount] = useState(contract?.amount ?? "");
+  const [excessAmount, setExcessAmount] = useState(contract?.excess_new_amount ?? "");
+  const [startDate, setStartDate] = useState(contract?.start_date || new Date().toISOString().slice(0, 10));
+  const [durationMonths, setDurationMonths] = useState(contract?.duration_months ?? 12);
+  const [operatorId, setOperatorId] = useState(contract?.operator_id || "");
+
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
 
-  async function handleAdd(lineId) {
-    if (!newName.trim()) return;
-    setBusyId("new");
-    setError(null);
-    const { error: err } = await supabase
-      .from("products")
-      .insert({ name: newName.trim(), product_line_id: lineId });
-    setBusyId(null);
-    if (err) {
-      setError("Errore durante l'aggiunta: " + err.message);
+  useEffect(() => {
+    if (contactSearch.trim().length < 2) {
+      setContactResults([]);
       return;
     }
-    setNewName("");
-    setAddingLineId(null);
-    onChange();
-  }
+    setSearchingContacts(true);
+    const t = setTimeout(async () => {
+      const term = `%${contactSearch.trim()}%`;
+      const { data } = await supabase
+        .from("contacts")
+        .select("id, first_name, last_name, company")
+        .or(`first_name.ilike.${term},last_name.ilike.${term},company.ilike.${term}`)
+        .limit(8);
+      setContactResults(data || []);
+      setSearchingContacts(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [contactSearch]);
 
-  async function handleSaveEdit(id) {
-    if (!editName.trim()) return;
-    setBusyId(id);
-    setError(null);
-    const { error: err } = await supabase.from("products").update({ name: editName.trim() }).eq("id", id);
-    setBusyId(null);
-    if (err) {
-      setError("Errore durante il salvataggio: " + err.message);
+  async function handleQuickAddContact() {
+    if (!quickFirstName.trim()) {
+      setError("Inserisci almeno il nome del nuovo contatto.");
       return;
     }
-    setEditingId(null);
-    onChange();
-  }
-
-  async function handleDelete(id) {
-    if (!confirm("Eliminare questo prodotto? I contratti già registrati resteranno, ma senza prodotto specifico.")) return;
-    setBusyId(id);
+    setSaving(true);
     setError(null);
-    const { error: err } = await supabase.from("products").delete().eq("id", id);
-    setBusyId(null);
+    const { data, error: err } = await supabase
+      .from("contacts")
+      .insert({
+        first_name: quickFirstName.trim(),
+        last_name: quickLastName.trim() || null,
+        company: quickCompany.trim() || null,
+        status: "attivo",
+      })
+      .select()
+      .single();
+    setSaving(false);
     if (err) {
-      setError("Errore durante l'eliminazione: " + err.message);
+      console.error(err);
+      setError("Non sono riuscito a creare il contatto.");
       return;
     }
-    onChange();
+    setSelectedContact(data);
+    setQuickAddOpen(false);
   }
 
-  if (productLines.length === 0) {
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!selectedContact) {
+      setError("Seleziona o crea un contatto per il contratto.");
+      return;
+    }
+    if (!productLineId) {
+      setError("Seleziona la linea di prodotto.");
+      return;
+    }
+    if (!amount || Number(amount) <= 0) {
+      setError("Inserisci un importo valido.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+
+    const payload = {
+      contact_id: selectedContact.id,
+      product_line_id: productLineId,
+      product_id: productId || null,
+      contract_type: contractType,
+      amount: Number(amount),
+      excess_new_amount: contractType === "rinnovo" && excessAmount !== "" ? Number(excessAmount) : null,
+      start_date: startDate,
+      duration_months: Number(durationMonths) || 12,
+      operator_id: operatorId || null,
+    };
+
+    try {
+      if (isEdit) {
+        const { error: err } = await supabase.from("contracts").update(payload).eq("id", contract.id);
+        if (err) throw err;
+      } else {
+        const { error: err } = await supabase.from("contracts").insert(payload);
+        if (err) throw err;
+      }
+
+      // Registrare un contratto significa che la trattativa è stata vinta: sposta
+      // automaticamente il contatto sulla fase "Chiuso vinto" della pipeline, così
+      // le statistiche (% vinti per canale, ecc.) lo contano senza doverlo spostare
+      // a mano nel Kanban.
+      const wonStage = pipelineStages.find((s) => s.name === "Chiuso vinto");
+      if (wonStage && selectedContact?.id) {
+        const { error: stageErr } = await supabase
+          .from("contacts")
+          .update({ pipeline_stage_id: wonStage.id, updated_at: new Date().toISOString() })
+          .eq("id", selectedContact.id);
+        if (stageErr) console.error(stageErr);
+      }
+
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setError("Salvataggio non riuscito: " + (err.message || "errore sconosciuto"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm("Eliminare questo contratto?")) return;
+    setDeleting(true);
+    const { error: err } = await supabase.from("contracts").delete().eq("id", contract.id);
+    if (err) {
+      console.error(err);
+      setError("Eliminazione non riuscita.");
+      setDeleting(false);
+      return;
+    }
+    onDeleted?.();
+    onClose();
+  }
+
+  if (settingsLoading) {
     return (
-      <p className="text-sm text-slate-500">
-        Prima aggiungi almeno una linea di prodotto nella scheda "Linee di prodotto".
-      </p>
+      <Modal title={isEdit ? "Modifica contratto" : "Nuovo contratto"} onClose={onClose}>
+        <div className="flex items-center justify-center py-10 text-slate-400 gap-2">
+          <Loader2 className="animate-spin" size={18} /> Caricamento...
+        </div>
+      </Modal>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-500">
-        Per ogni linea di prodotto inserisci i prodotti specifici che vendi (es. il nome di ogni banca dati con AI).
-        Compariranno come menu nei Contratti e negli esiti positivi degli Appuntamenti.
-      </p>
+    <Modal
+      title={isEdit ? "Modifica contratto" : "Nuovo contratto"}
+      onClose={onClose}
+      wide
+      footer={
+        <div className="flex items-center justify-between">
+          <div>
+            {isEdit && (
+              <button type="button" onClick={handleDelete} disabled={deleting} className="flex items-center gap-1.5 text-sm text-rose-600 hover:text-rose-700 disabled:opacity-50">
+                <Trash2 size={15} /> {deleting ? "Eliminazione..." : "Elimina contratto"}
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+              Annulla
+            </button>
+            <button type="submit" form="contract-form" disabled={saving} className="px-4 py-2 text-sm rounded-lg bg-navy-600 text-white hover:bg-navy-700 disabled:opacity-50 flex items-center gap-1.5">
+              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving ? "Salvataggio..." : "Salva"}
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <form id="contract-form" onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{error}</div>
+        )}
 
-      {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{error}</div>
-      )}
-
-      {productLines.map((line) => {
-        const items = products.filter((p) => p.product_line_id === line.id);
-        return (
-          <div key={line.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-              <p className="text-sm font-semibold text-navy-700">
-                {line.name} <span className="text-xs font-normal text-slate-400">· {items.length}</span>
-              </p>
-              {addingLineId !== line.id && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAddingLineId(line.id);
-                    setNewName("");
-                  }}
-                  className="flex items-center gap-1 text-xs text-navy-600 hover:text-navy-700 font-medium"
-                >
-                  <Plus size={13} /> Aggiungi
+        <div>
+          <span className="block text-xs font-medium text-slate-500 mb-1">Contatto *</span>
+          {selectedContact ? (
+            <div className="flex items-center justify-between bg-navy-50 border border-navy-100 rounded-lg px-3 py-2">
+              <div>
+                <p className="text-sm font-medium text-navy-700">
+                  {selectedContact.first_name} {selectedContact.last_name || ""}
+                </p>
+                {selectedContact.company && <p className="text-xs text-slate-500">{selectedContact.company}</p>}
+              </div>
+              {!isEdit && (
+                <button type="button" onClick={() => setSelectedContact(null)} className="text-slate-400 hover:text-slate-600">
+                  <X size={16} />
                 </button>
               )}
             </div>
-
-            <div className="divide-y divide-slate-100">
-              {items.length === 0 && addingLineId !== line.id && (
-                <p className="px-4 py-2.5 text-xs text-slate-400">Nessun prodotto specifico</p>
-              )}
-
-              {items.map((p) => (
-                <div key={p.id} className="flex items-center justify-between gap-2 px-4 py-2">
-                  {editingId === p.id ? (
-                    <>
-                      <input
-                        className="input flex-1"
-                        value={editName}
-                        autoFocus
-                        onChange={(e) => setEditName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleSaveEdit(p.id)}
-                      />
-                      <button type="button" onClick={() => handleSaveEdit(p.id)} className="text-emerald-600 p-1">
-                        {busyId === p.id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                      </button>
-                      <button type="button" onClick={() => setEditingId(null)} className="text-slate-400 p-1">
-                        <X size={15} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sm text-slate-700">{p.name}</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingId(p.id);
-                            setEditName(p.name);
-                          }}
-                          className="text-slate-400 hover:text-navy-600 p-1"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(p.id)}
-                          disabled={busyId === p.id}
-                          className="text-slate-400 hover:text-rose-600 p-1"
-                        >
-                          {busyId === p.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-
-              {addingLineId === line.id && (
-                <div className="flex items-center gap-2 px-4 py-2">
-                  <input
-                    className="input flex-1"
-                    placeholder="Nome del prodotto"
-                    value={newName}
-                    autoFocus
-                    onChange={(e) => setNewName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleAdd(line.id)}
-                  />
-                  <button type="button" onClick={() => handleAdd(line.id)} className="text-emerald-600 p-1">
-                    {busyId === "new" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                  </button>
-                  <button type="button" onClick={() => setAddingLineId(null)} className="text-slate-400 p-1">
-                    <X size={15} />
-                  </button>
-                </div>
-              )}
+          ) : quickAddOpen ? (
+            <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input className="input" placeholder="Nome *" value={quickFirstName} onChange={(e) => setQuickFirstName(e.target.value)} />
+                <input className="input" placeholder="Cognome" value={quickLastName} onChange={(e) => setQuickLastName(e.target.value)} />
+              </div>
+              <input className="input" placeholder="Azienda" value={quickCompany} onChange={(e) => setQuickCompany(e.target.value)} />
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={() => setQuickAddOpen(false)} className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600">
+                  Annulla
+                </button>
+                <button type="button" onClick={handleQuickAddContact} disabled={saving} className="px-3 py-1.5 text-xs rounded-lg bg-navy-600 text-white">
+                  Crea contatto
+                </button>
+              </div>
             </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input className="input pl-8" placeholder="Cerca un contatto esistente..." value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} />
+              </div>
+              {searchingContacts && (
+                <p className="text-xs text-slate-400 flex items-center gap-1">
+                  <Loader2 size={12} className="animate-spin" /> Ricerca...
+                </p>
+              )}
+              {contactResults.length > 0 && (
+                <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-40 overflow-y-auto">
+                  {contactResults.map((c) => (
+                    <button
+                      type="button"
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedContact(c);
+                        setContactResults([]);
+                        setContactSearch("");
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-navy-50 text-sm"
+                    >
+                      {c.first_name} {c.last_name || ""} {c.company ? `· ${c.company}` : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button type="button" onClick={() => setQuickAddOpen(true)} className="flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-700 font-medium">
+                <UserPlus size={13} /> Crea un nuovo contatto al volo
+              </button>
+            </div>
+          )}
+        </div>
+
+        <label className="block">
+          <span className="block text-xs font-medium text-slate-500 mb-1">Linea di prodotto *</span>
+          <select
+            className="input"
+            value={productLineId}
+            onChange={(e) => {
+              setProductLineId(e.target.value);
+              setProductId("");
+            }}
+          >
+            <option value="">Seleziona...</option>
+            {productLines.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {productLineId && (
+          <label className="block">
+            <span className="block text-xs font-medium text-slate-500 mb-1">Prodotto specifico</span>
+            <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
+              <option value="">— Non specificato —</option>
+              {products
+                .filter((p) => p.product_line_id === productLineId)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+            {products.filter((p) => p.product_line_id === productLineId).length === 0 && (
+              <span className="block text-[11px] text-slate-400 mt-0.5">
+                Nessun prodotto per questa linea: aggiungili in Impostazioni → Prodotti.
+              </span>
+            )}
+          </label>
+        )}
+
+        <label className="block">
+          <span className="block text-xs font-medium text-slate-500 mb-1">Tipo contratto</span>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input type="radio" checked={contractType === "nuovo"} onChange={() => setContractType("nuovo")} /> Nuovo
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input type="radio" checked={contractType === "rinnovo"} onChange={() => setContractType("rinnovo")} /> Rinnovo
+            </label>
           </div>
-        );
-      })}
-    </div>
+        </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-xs font-medium text-slate-500 mb-1">Importo (€) *</span>
+            <input type="number" step="0.01" className="input" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </label>
+          {contractType === "rinnovo" && (
+            <label className="block">
+              <span className="block text-xs font-medium text-slate-500 mb-1">
+                di cui quota "Nuovo" (€)
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                className="input"
+                placeholder="Solo se l'importo supera il precedente"
+                value={excessAmount}
+                onChange={(e) => setExcessAmount(e.target.value)}
+              />
+            </label>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-xs font-medium text-slate-500 mb-1">Data inizio *</span>
+            <input type="date" className="input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-slate-500 mb-1">Durata (mesi)</span>
+            <input type="number" className="input" value={durationMonths} onChange={(e) => setDurationMonths(e.target.value)} />
+          </label>
+        </div>
+
+        <label className="block">
+          <span className="block text-xs font-medium text-slate-500 mb-1">Operatore (per le Statistiche mensili)</span>
+          <select className="input" value={operatorId} onChange={(e) => setOperatorId(e.target.value)}>
+            <option value="">—</option>
+            {operators.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.initials} {o.name ? `· ${o.name}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+
+      </form>
+    </Modal>
   );
 }
 
