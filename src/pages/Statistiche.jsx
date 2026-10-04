@@ -54,7 +54,7 @@ export default function Statistiche() {
         .lt("appointment_date", rangeEnd),
       supabase
         .from("contracts")
-        .select("id, amount, contract_type, excess_new_amount, operator_id, product_line_id, product_lines(name)")
+        .select("id, amount, contract_type, excess_new_amount, operator_id, product_line_id, product_lines(name), product_id, products(name)")
         .gte("start_date", rangeStart)
         .lt("start_date", rangeEnd),
     ]);
@@ -206,15 +206,25 @@ export default function Statistiche() {
     const byLine = new Map();
     contracts.forEach((c) => {
       const label = c.product_lines?.name || "Non specificata";
-      const entry = byLine.get(label) || { label, count: 0, importo: 0, nuovo: 0, rinnovo: 0 };
+      const entry = byLine.get(label) || { label, count: 0, importo: 0, nuovo: 0, rinnovo: 0, byProduct: new Map() };
       entry.count += 1;
       const { nuovo, rinnovo } = splitNuovoRinnovo(c);
       entry.importo += nuovo + rinnovo;
       entry.nuovo += nuovo;
       entry.rinnovo += rinnovo;
+      // Dettaglio per prodotto specifico all'interno della linea
+      const prLabel = c.products?.name || "Prodotto non specificato";
+      const pr = entry.byProduct.get(prLabel) || { label: prLabel, count: 0, importo: 0, nuovo: 0, rinnovo: 0 };
+      pr.count += 1;
+      pr.importo += nuovo + rinnovo;
+      pr.nuovo += nuovo;
+      pr.rinnovo += rinnovo;
+      entry.byProduct.set(prLabel, pr);
       byLine.set(label, entry);
     });
-    return Array.from(byLine.values()).sort((a, b) => b.importo - a.importo);
+    return Array.from(byLine.values())
+      .map((e) => ({ ...e, products: Array.from(e.byProduct.values()).sort((a, b) => b.importo - a.importo) }))
+      .sort((a, b) => b.importo - a.importo);
   }, [contracts]);
 
   return (
@@ -410,7 +420,8 @@ export default function Statistiche() {
               </div>
               <div className="divide-y divide-slate-100">
                 {productLineBreakdown.map((p) => (
-                  <div key={p.label} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                  <div key={p.label}>
+                  <div className="flex items-center justify-between px-4 py-2.5 text-sm">
                     <span className="text-slate-600">
                       {p.label} <span className="text-slate-400">· {p.count} contratti</span>
                     </span>
@@ -421,6 +432,24 @@ export default function Statistiche() {
                       </p>
                     </div>
                   </div>
+                  {!(p.products.length === 1 && p.products[0].label === "Prodotto non specificato") &&
+                    p.products.map((pr) => (
+                      <div
+                        key={pr.label}
+                        className="flex items-center justify-between pl-8 pr-4 py-1.5 text-xs bg-slate-50/60"
+                      >
+                        <span className="text-slate-500">
+                          {pr.label} <span className="text-slate-400">· {pr.count}</span>
+                        </span>
+                        <span className="text-right text-slate-500">
+                          {formatCurrency(pr.importo)}{" "}
+                          <span className="text-slate-400">
+                            (N {formatCurrency(pr.nuovo)} · R {formatCurrency(pr.rinnovo)})
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 ))}
               </div>
             </div>
@@ -430,4 +459,5 @@ export default function Statistiche() {
     </div>
   );
 }
+
 
