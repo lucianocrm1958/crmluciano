@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSettings } from "../lib/useSettings";
 import SettingsList from "../components/SettingsList";
 import OperatorsList from "../components/OperatorsList";
+import ProductsList from "../components/ProductsList";
 import { Loader2 } from "lucide-react";
 
 const TABS = [
@@ -9,6 +10,7 @@ const TABS = [
   { key: "leadSources", label: "Fonti dei lead", table: "lead_sources" },
   { key: "professionalCategories", label: "Categorie professionali", table: "professional_categories" },
   { key: "productLines", label: "Linee di prodotto", table: "product_lines" },
+  { key: "products", label: "Prodotti", isProducts: true },
   { key: "lostReasons", label: "Motivi trattativa persa", table: "lost_reasons" },
   { key: "callOutcomes", label: "Esiti chiamata", table: "call_outcomes" },
   { key: "operators", label: "Operatori", table: "operators", isOperators: true },
@@ -54,6 +56,8 @@ export default function Impostazioni() {
       <div className="max-w-xl">
         {activeTabConfig.isOperators ? (
           <OperatorsList items={settings.operators} onChange={settings.reload} />
+        ) : activeTabConfig.isProducts ? (
+          <ProductsList products={settings.products} productLines={settings.productLines} onChange={settings.reload} />
         ) : (
           <SettingsList
             key={activeTabConfig.key}
@@ -68,3 +72,4 @@ export default function Impostazioni() {
     </div>
   );
 }
+
