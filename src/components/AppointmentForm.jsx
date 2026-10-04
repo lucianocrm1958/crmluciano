@@ -28,7 +28,7 @@ function buildEmailLink(email) {
 }
 
 export default function AppointmentForm({ appointment, presetContact, initialDate, onClose, onSaved, onDeleted }) {
-  const { operators, callOutcomes, productLines, pipelineStages } = useSettings();
+  const { operators, callOutcomes, productLines, products, pipelineStages } = useSettings();
   const isEdit = !!appointment;
 
   const [selectedContact, setSelectedContact] = useState(
@@ -210,7 +210,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     (async () => {
       const { data, error: err } = await supabase
         .from("contracts")
-        .select("id, contract_type, product_line_id, amount, excess_new_amount, start_date")
+        .select("id, contract_type, product_line_id, product_id, amount, excess_new_amount, start_date")
         .eq("appointment_id", appointment.id);
       if (cancelled) return;
       if (!err && data && data.length > 0) {
@@ -220,6 +220,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             contractId: c.id,
             contractType: c.contract_type || "nuovo",
             productLineId: c.product_line_id || "",
+            productId: c.product_id || "",
             amount: c.amount ?? "",
             excessAmount: c.excess_new_amount ?? "",
             startDate: c.start_date || date,
@@ -234,6 +235,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             contractId: null,
             contractType: "nuovo",
             productLineId: appointment.result_product_line_id || "",
+            productId: "",
             amount: appointment.result_amount,
             excessAmount: "",
             startDate: date,
@@ -253,7 +255,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
     if (!linesReady) return;
     if (result === "positivo" && resultLines.length === 0) {
       setResultLines([
-        { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "", excessAmount: "", startDate: date },
+        { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", productId: "", amount: "", excessAmount: "", startDate: date },
       ]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -262,7 +264,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   function addResultLine() {
     setResultLines((lines) => [
       ...lines,
-      { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", amount: "", excessAmount: "", startDate: date },
+      { key: makeLineKey(), contractId: null, contractType: "nuovo", productLineId: "", productId: "", amount: "", excessAmount: "", startDate: date },
     ]);
   }
 
@@ -356,6 +358,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         contact_id: selectedContact.id,
         appointment_id: appointmentId,
         product_line_id: line.productLineId || null,
+        product_id: line.productLineId ? line.productId || null : null,
         contract_type: line.contractType,
         amount: Number(line.amount),
         excess_new_amount:
@@ -1023,7 +1026,10 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                               <select
                                 className="input"
                                 value={line.productLineId}
-                                onChange={(e) => updateResultLine(line.key, "productLineId", e.target.value)}
+                                onChange={(e) => {
+                                  updateResultLine(line.key, "productLineId", e.target.value);
+                                  updateResultLine(line.key, "productId", "");
+                                }}
                               >
                                 <option value="">—</option>
                                 {productLines.map((p) => (
@@ -1033,6 +1039,26 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                                 ))}
                               </select>
                             </label>
+                            {line.productLineId &&
+                              products.some((p) => p.product_line_id === line.productLineId) && (
+                                <label className="block col-span-2">
+                                  <span className="block text-[11px] text-slate-400 mb-0.5">Prodotto specifico</span>
+                                  <select
+                                    className="input"
+                                    value={line.productId || ""}
+                                    onChange={(e) => updateResultLine(line.key, "productId", e.target.value)}
+                                  >
+                                    <option value="">— Non specificato —</option>
+                                    {products
+                                      .filter((p) => p.product_line_id === line.productLineId)
+                                      .map((p) => (
+                                        <option key={p.id} value={p.id}>
+                                          {p.name}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </label>
+                              )}
                             <label className="block col-span-2">
                               <span className="block text-[11px] text-slate-400 mb-0.5">
                                 Decorrenza fatturato (mese in cui l'importo conta nelle Statistiche)
@@ -1133,3 +1159,4 @@ function splitAddress(fullAddress) {
   }
   return { street: value, civico: "" };
 }
+
