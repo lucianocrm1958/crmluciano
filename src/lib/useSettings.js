@@ -14,6 +14,7 @@ export function useSettings() {
     lostReasons: [],
     operators: [],
     callOutcomes: [],
+    products: [],
   });
 
   const load = useCallback(async () => {
@@ -27,6 +28,7 @@ export function useSettings() {
         { data: reasons, error: e5 },
         { data: operators, error: e6 },
         { data: callOutcomes, error: e7 },
+        { data: productItems, error: e8 },
       ] = await Promise.all([
         supabase.from("professional_categories").select("id, name").order("name"),
         supabase.from("lead_sources").select("id, name").order("name"),
@@ -35,8 +37,9 @@ export function useSettings() {
         supabase.from("lost_reasons").select("id, name").order("name"),
         supabase.from("operators").select("id, initials, name").order("initials"),
         supabase.from("call_outcomes").select("id, name").order("name"),
+        supabase.from("products").select("id, name, product_line_id").order("name"),
       ]);
-      const err = e1 || e2 || e3 || e4 || e5 || e6 || e7;
+      const err = e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8;
       if (err) throw err;
       setData({
         professionalCategories: cats || [],
@@ -46,6 +49,7 @@ export function useSettings() {
         lostReasons: reasons || [],
         operators: operators || [],
         callOutcomes: callOutcomes || [],
+        products: productItems || [],
       });
     } catch (err) {
       console.error(err);
