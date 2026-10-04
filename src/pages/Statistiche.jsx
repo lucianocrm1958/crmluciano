@@ -172,19 +172,35 @@ export default function Statistiche() {
     );
   }, [perOperator]);
 
-  // Percentuali calcolate sugli appuntamenti "fissati" già passati nel mese (svolti,
-  // non effettuati e da rifissare), esclusi quelli ancora futuri/da fare.
+  // Percentuali calcolate sugli appuntamenti del mese con data fino a oggi compreso:
+  // esclusi solo quelli fissati nei giorni successivi. Gli appuntamenti già passati ma
+  // ancora senza stato/esito finiscono in "Da aggiornare", così la barra somma al 100%.
   const esitiPercent = useMemo(() => {
-    const base = totals.svolti + totals.nonEffettuato + totals.daRifissare || 0;
-    const pct = (n) => (base > 0 ? Math.round((n / base) * 100) : 0);
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}`;
+    const c = { base: 0, positivo: 0, negativo: 0, pending: 0, nonCollegato: 0, daAggiornare: 0 };
+    appointments.forEach((a) => {
+      if (!a.appointment_date || a.appointment_date > todayKey) return;
+      c.base += 1;
+      if (a.status === "svolto" && a.result === "positivo") c.positivo += 1;
+      else if (a.status === "svolto" && a.result === "negativo") c.negativo += 1;
+      else if (a.status === "svolto" && a.result === "pending") c.pending += 1;
+      else if (a.status === "non_effettuato" || a.status === "da_rifissare") c.nonCollegato += 1;
+      else c.daAggiornare += 1;
+    });
+    const pct = (n) => (c.base > 0 ? Math.round((n / c.base) * 100) : 0);
     return {
-      base,
-      positivo: pct(totals.positivo),
-      negativo: pct(totals.negativo),
-      pending: pct(totals.pending),
-      nonCollegato: pct(totals.nonCollegato),
+      ...c,
+      futuri: appointments.length - c.base,
+      positivoPct: pct(c.positivo),
+      negativoPct: pct(c.negativo),
+      pendingPct: pct(c.pending),
+      nonCollegatoPct: pct(c.nonCollegato),
+      daAggiornarePct: pct(c.daAggiornare),
     };
-  }, [totals]);
+  }, [appointments]);
 
   const productLineBreakdown = useMemo(() => {
     const byLine = new Map();
@@ -256,50 +272,66 @@ export default function Statistiche() {
 
           {esitiPercent.base > 0 && (
             <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <p className="text-sm font-semibold text-navy-700">Distribuzione esiti sugli appuntamenti svolti</p>
+              <p className="text-sm font-semibold text-navy-700">Distribuzione esiti sugli appuntamenti</p>
               <p className="text-xs text-slate-400 mt-0.5 mb-3">
-                Percentuali calcolate sui {esitiPercent.base} appuntamenti fissati nel mese e già passati (svolti, non
-                effettuati o da rifissare), esclusi quelli ancora futuri da fare.
+                Percentuali calcolate sui {esitiPercent.base} appuntamenti del mese fino a oggi compreso
+                {esitiPercent.futuri > 0 ? ` (esclusi i ${esitiPercent.futuri} fissati nei giorni successivi)` : ""}.
               </p>
               <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 gap-0.5 mb-3">
-                {totals.positivo > 0 && (
-                  <div className="bg-emerald-500" style={{ width: `${esitiPercent.positivo}%` }} />
+                {esitiPercent.positivo > 0 && (
+                  <div className="bg-emerald-500" style={{ width: `${esitiPercent.positivoPct}%` }} />
                 )}
-                {totals.negativo > 0 && <div className="bg-rose-500" style={{ width: `${esitiPercent.negativo}%` }} />}
-                {totals.pending > 0 && <div className="bg-slate-400" style={{ width: `${esitiPercent.pending}%` }} />}
-                {totals.nonCollegato > 0 && (
-                  <div className="bg-amber-500" style={{ width: `${esitiPercent.nonCollegato}%` }} />
+                {esitiPercent.negativo > 0 && (
+                  <div className="bg-rose-500" style={{ width: `${esitiPercent.negativoPct}%` }} />
+                )}
+                {esitiPercent.pending > 0 && (
+                  <div className="bg-slate-400" style={{ width: `${esitiPercent.pendingPct}%` }} />
+                )}
+                {esitiPercent.nonCollegato > 0 && (
+                  <div className="bg-amber-500" style={{ width: `${esitiPercent.nonCollegatoPct}%` }} />
+                )}
+                {esitiPercent.daAggiornare > 0 && (
+                  <div className="bg-sky-300" style={{ width: `${esitiPercent.daAggiornarePct}%` }} />
                 )}
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
                   <span className="text-slate-600">
-                    Positivo <span className="font-semibold text-slate-800">{esitiPercent.positivo}%</span>{" "}
-                    <span className="text-slate-400">({totals.positivo})</span>
+                    Positivo <span className="font-semibold text-slate-800">{esitiPercent.positivoPct}%</span>{" "}
+                    <span className="text-slate-400">({esitiPercent.positivo})</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
                   <span className="text-slate-600">
-                    Negativo <span className="font-semibold text-slate-800">{esitiPercent.negativo}%</span>{" "}
-                    <span className="text-slate-400">({totals.negativo})</span>
+                    Negativo <span className="font-semibold text-slate-800">{esitiPercent.negativoPct}%</span>{" "}
+                    <span className="text-slate-400">({esitiPercent.negativo})</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
                   <span className="text-slate-600">
-                    Pending <span className="font-semibold text-slate-800">{esitiPercent.pending}%</span>{" "}
-                    <span className="text-slate-400">({totals.pending})</span>
+                    Pending <span className="font-semibold text-slate-800">{esitiPercent.pendingPct}%</span>{" "}
+                    <span className="text-slate-400">({esitiPercent.pending})</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
                   <span className="text-slate-600">
-                    Non collegati <span className="font-semibold text-slate-800">{esitiPercent.nonCollegato}%</span>{" "}
-                    <span className="text-slate-400">({totals.nonCollegato})</span>
+                    Non svolti <span className="font-semibold text-slate-800">{esitiPercent.nonCollegatoPct}%</span>{" "}
+                    <span className="text-slate-400">({esitiPercent.nonCollegato})</span>
                   </span>
                 </div>
+                {esitiPercent.daAggiornare > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-300 shrink-0" />
+                    <span className="text-slate-600">
+                      Da aggiornare <span className="font-semibold text-slate-800">{esitiPercent.daAggiornarePct}%</span>{" "}
+                      <span className="text-slate-400">({esitiPercent.daAggiornare})</span>
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -398,3 +430,4 @@ export default function Statistiche() {
     </div>
   );
 }
+
