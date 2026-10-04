@@ -18,7 +18,7 @@ export default function Contratti() {
     const { data, error: err } = await supabase
       .from("contracts")
       .select(
-        "id, amount, excess_new_amount, contract_type, start_date, duration_months, contact_id, product_line_id, operator_id, contacts(first_name, last_name, company), product_lines(name)"
+        "id, amount, excess_new_amount, contract_type, start_date, duration_months, contact_id, product_line_id, product_id, operator_id, products(name), contacts(first_name, last_name, company), product_lines(name)"
       )
       .order("start_date", { ascending: false });
     if (err) {
@@ -172,7 +172,8 @@ export default function Contratti() {
                     )}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {c.product_lines?.name} · {formatDate(c.start_date)} · {c.duration_months} mesi
+                    {c.product_lines?.name}
+                    {c.products?.name ? ` – ${c.products.name}` : ""} · {formatDate(c.start_date)} · {c.duration_months} mesi
                   </p>
                 </div>
                 <div className="text-right">
@@ -202,3 +203,4 @@ export default function Contratti() {
     </div>
   );
 }
+
