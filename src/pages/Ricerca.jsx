@@ -1,8 +1,4 @@
- searchNotes: true,
-  status: "tutti",
-  categoryId: "",
-  sourceId: "",
-  stageId: "",import { useMemo, useState } from "react";
+ stageId: "",import { useMemo, useState } from "react";
 import { Search, Loader2, RotateCcw, FileSpreadsheet, SlidersHorizontal } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
@@ -22,7 +18,11 @@ const MAX_SHOWN = 300;
 
 const EMPTY_FILTERS = {
   text: "",
-
+  searchNotes: true,
+  status: "tutti",
+  categoryId: "",
+  sourceId: "",
+  stageId: "",
   operatorId: "",
   listName: "",
   city: "",
