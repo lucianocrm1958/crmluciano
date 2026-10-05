@@ -10,6 +10,7 @@ import {
   Archive,
   Settings,
   BarChart3,
+  Search,
   LogOut,
   X,
 } from "lucide-react";
@@ -17,6 +18,7 @@ import {
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/contatti", label: "Contatti", icon: Users },
+  { to: "/ricerca", label: "Ricerca avanzata", icon: Search },
   { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/appuntamenti", label: "Appuntamenti", icon: CalendarDays },
   { to: "/statistiche", label: "Statistiche", icon: BarChart3 },
