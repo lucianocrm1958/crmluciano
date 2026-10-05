@@ -12,6 +12,7 @@ import FollowUp from "./pages/FollowUp";
 import Contratti from "./pages/Contratti";
 import Archivio from "./pages/Archivio";
 import Impostazioni from "./pages/Impostazioni";
+import Ricerca from "./pages/Ricerca";
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -39,6 +40,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="contatti" element={<Contatti />} />
+          <Route path="ricerca" element={<Ricerca />} />
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="appuntamenti" element={<Appuntamenti />} />
           <Route path="statistiche" element={<Statistiche />} />
