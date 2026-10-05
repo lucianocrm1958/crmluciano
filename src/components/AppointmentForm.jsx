@@ -1,5 +1,4 @@
-                              </label>
-                            )} import { createElement, useEffect, useState } from "react";
+import { createElement, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
@@ -1094,7 +1093,8 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                                   value={line.excessAmount}
                                   onChange={(e) => updateResultLine(line.key, "excessAmount", e.target.value)}
                                 />
-
+                              </label>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1164,5 +1164,3 @@ function splitAddress(fullAddress) {
   }
   return { street: value, civico: "" };
 }
-
-
