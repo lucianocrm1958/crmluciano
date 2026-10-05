@@ -4,6 +4,19 @@ import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import { formatCurrency, MONTH_LABELS } from "../lib/format";
 import KpiCard from "../components/KpiCard";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+
+// Colori delle fette della torta (in linea con il blu navy e l'oro della Dashboard);
+// l'ultimo, grigio, è riservato alla voce "Altri prodotti".
+const PIE_COLORS = ["#1F3864", "#8C6D1F", "#2E7D6B", "#B4533C", "#5B7FB5", "#7A5C99", "#C49A3A"];
+const PIE_OTHER_COLOR = "#94A3B8";
+const PIE_MAX_SLICES = 7;
+
+const PIE_MODES = [
+  { key: "importo", label: "Totale" },
+  { key: "nuovo", label: "Nuovo" },
+  { key: "rinnovo", label: "Rinnovo" },
+];
 
 // Formatta uno Date come "YYYY-MM" per l'input mese e come chiave interna.
 function toMonthKey(date) {
@@ -28,6 +41,7 @@ export default function Statistiche() {
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [pieMode, setPieMode] = useState("importo");
 
   const [year, month] = monthKey.split("-").map(Number); // month: 1-12
 
@@ -226,6 +240,50 @@ export default function Statistiche() {
       .map((e) => ({ ...e, products: Array.from(e.byProduct.values()).sort((a, b) => b.importo - a.importo) }))
       .sort((a, b) => b.importo - a.importo);
   }, [contracts]);
+
+  // Quota di vendita di ogni singolo prodotto sul totale del mese (per la torta).
+  // I contratti senza prodotto specifico sono raggruppati per linea.
+  const productPie = useMemo(() => {
+    const byProduct = new Map();
+    contracts.forEach((c) => {
+      const lineName = c.product_lines?.name || "Linea non specificata";
+      const label = c.products?.name || `${lineName} (prodotto non specificato)`;
+      const entry = byProduct.get(label) || { label, line: lineName, count: 0, importo: 0, nuovo: 0, rinnovo: 0 };
+      const { nuovo, rinnovo } = splitNuovoRinnovo(c);
+      entry.count += 1;
+      entry.importo += nuovo + rinnovo;
+      entry.nuovo += nuovo;
+      entry.rinnovo += rinnovo;
+      byProduct.set(label, entry);
+    });
+    const rows = Array.from(byProduct.values())
+      .map((r) => ({ ...r, value: r[pieMode] }))
+      .filter((r) => r.value > 0)
+      .sort((a, b) => b.value - a.value);
+    const total = rows.reduce((sum, r) => sum + r.value, 0);
+    let slices = rows;
+    if (rows.length > PIE_MAX_SLICES + 1) {
+      const rest = rows.slice(PIE_MAX_SLICES);
+      slices = [
+        ...rows.slice(0, PIE_MAX_SLICES),
+        {
+          label: `Altri prodotti (${rest.length})`,
+          line: "",
+          count: rest.reduce((n, r) => n + r.count, 0),
+          value: rest.reduce((n, r) => n + r.value, 0),
+          isOther: true,
+        },
+      ];
+    }
+    return {
+      total,
+      slices: slices.map((r, i) => ({
+        ...r,
+        pct: total > 0 ? (r.value / total) * 100 : 0,
+        color: r.isOther ? PIE_OTHER_COLOR : PIE_COLORS[i % PIE_COLORS.length],
+      })),
+    };
+  }, [contracts, pieMode]);
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -454,10 +512,98 @@ export default function Statistiche() {
               </div>
             </div>
           )}
+
+          {contracts.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden max-w-3xl">
+              <div className="flex items-center justify-between flex-wrap gap-2 px-4 py-3 border-b border-slate-100">
+                <div>
+                  <p className="text-sm font-semibold text-navy-700">Vendite per prodotto</p>
+                  <p className="text-xs text-slate-400">% sul fatturato del mese</p>
+                </div>
+                <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+                  {PIE_MODES.map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setPieMode(m.key)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                        pieMode === m.key ? "bg-white text-navy-700 shadow-sm" : "text-slate-500 hover:text-navy-600"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {productPie.total === 0 ? (
+                <p className="px-4 py-8 text-sm text-slate-400 text-center">
+                  Nessun importo {pieMode === "importo" ? "" : pieMode === "nuovo" ? "Nuovo " : "Rinnovo "}nel mese selezionato
+                </p>
+              ) : (
+                <div className="flex flex-col md:flex-row md:items-center gap-4 p-4">
+                  <div className="w-full md:w-60 h-60 shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={productPie.slices}
+                          dataKey="value"
+                          nameKey="label"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius="90%"
+                          stroke="#FFFFFF"
+                          strokeWidth={2}
+                          isAnimationActive={false}
+                        >
+                          {productPie.slices.map((s) => (
+                            <Cell key={s.label} fill={s.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value, name, item) => [
+                            `${formatCurrency(value)} · ${item.payload.pct.toFixed(1)}%`,
+                            name,
+                          ]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="flex-1 min-w-0 divide-y divide-slate-100">
+                    {productPie.slices.map((s) => (
+                      <div key={s.label} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: s.color }} />
+                          <div className="min-w-0">
+                            <p className="text-slate-700 truncate">{s.label}</p>
+                            {s.line && !s.label.includes("non specificato") && (
+                              <p className="text-[11px] text-slate-400 truncate">
+                                {s.line} · {s.count} contratti
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-semibold text-navy-700">{s.pct.toFixed(1)}%</p>
+                          <p className="text-[11px] text-slate-400">{formatCurrency(s.value)}</p>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-2 text-xs text-slate-500">
+                      <span>Totale</span>
+                      <span className="font-medium">{formatCurrency(productPie.total)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
+
 
 
