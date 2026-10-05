@@ -1,8 +1,10 @@
-import { createElement, useEffect, useState } from "react";
+                              </label>
+                            )} import { createElement, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
 import ContactEmailLog from "./ContactEmailLog";
+import ContactNotesTimeline from "./ContactNotesTimeline";
 import { Loader2, Trash2, Search, UserPlus, X, MapPin, Plus, Phone, Mail, Clock, AlertTriangle, Pencil } from "lucide-react";
 
 // Genera una chiave locale univoca per ogni riga prodotto dell'esito positivo,
@@ -768,6 +770,10 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
           )}
         </div>
 
+        {selectedContact && (
+          <ContactNotesTimeline contactId={selectedContact.id} source="appuntamenti" defaultOperatorId={operatorId} />
+        )}
+
         {selectedContact && <ContactEmailLog contactId={selectedContact.id} />}
 
         <div className="grid grid-cols-2 gap-3">
@@ -1088,8 +1094,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                                   value={line.excessAmount}
                                   onChange={(e) => updateResultLine(line.key, "excessAmount", e.target.value)}
                                 />
-                              </label>
-                            )}
+
                           </div>
                         </div>
                       ))}
@@ -1159,4 +1164,5 @@ function splitAddress(fullAddress) {
   }
   return { street: value, civico: "" };
 }
+
 
