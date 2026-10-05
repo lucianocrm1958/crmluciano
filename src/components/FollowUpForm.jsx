@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
+import ContactNotesTimeline from "./ContactNotesTimeline";
 import { Loader2, Trash2, Search, UserPlus, X } from "lucide-react";
 
 export default function FollowUpForm({ followUp, presetContact, onClose, onSaved, onDeleted }) {
@@ -225,6 +226,10 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
           )}
         </div>
 
+        {selectedContact && (
+          <ContactNotesTimeline contactId={selectedContact.id} source="followup" defaultOperatorId={operatorId} />
+        )}
+
         <label className="block">
           <span className="block text-xs font-medium text-slate-500 mb-1">Data promemoria *</span>
           <input type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
@@ -266,3 +271,4 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
     </Modal>
   );
 }
+
