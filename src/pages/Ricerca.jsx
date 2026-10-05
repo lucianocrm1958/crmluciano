@@ -1,4 +1,4 @@
- stageId: "",import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Search, Loader2, RotateCcw, FileSpreadsheet, SlidersHorizontal } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
