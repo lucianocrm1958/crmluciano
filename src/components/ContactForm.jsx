@@ -2,7 +2,7 @@ import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Modal from "./Modal";
 import ContactEmailLog from "./ContactEmailLog";
-import AppointmentHistory from "./AppointmentHistory";
+import ContactNotesTimeline from "./ContactNotesTimeline";
 import AppointmentForm from "./AppointmentForm";
 import { useSettings } from "../lib/useSettings";
 import { Loader2, Trash2, CalendarPlus } from "lucide-react";
@@ -434,7 +434,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           />
         </Field>
 
-        {isEdit && <AppointmentHistory contactId={contact.id} />}
+        {isEdit && <ContactNotesTimeline contactId={contact.id} source="contatti" />}
 
         {isEdit && <ContactEmailLog contactId={contact.id} />}
 
@@ -499,3 +499,4 @@ function Field({ label, children }) {
     </label>
   );
 }
+
