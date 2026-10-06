@@ -11,6 +11,7 @@ import {
   Settings,
   BarChart3,
   Search,
+  UserCheck,
   LogOut,
   X,
 } from "lucide-react";
@@ -22,6 +23,7 @@ const navItems = [
   { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/appuntamenti", label: "Appuntamenti", icon: CalendarDays },
   { to: "/statistiche", label: "Statistiche", icon: BarChart3 },
+  { to: "/monitoraggio", label: "Monitoraggio operatori", icon: UserCheck },
   { to: "/follow-up", label: "Follow-up", icon: BellRing },
   { to: "/contratti", label: "Contratti", icon: FileSignature },
   { to: "/archivio", label: "Archivio", icon: Archive },
