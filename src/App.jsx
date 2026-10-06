@@ -13,6 +13,7 @@ import Contratti from "./pages/Contratti";
 import Archivio from "./pages/Archivio";
 import Impostazioni from "./pages/Impostazioni";
 import Ricerca from "./pages/Ricerca";
+import Monitoraggio from "./pages/Monitoraggio";
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="appuntamenti" element={<Appuntamenti />} />
           <Route path="statistiche" element={<Statistiche />} />
+          <Route path="monitoraggio" element={<Monitoraggio />} />
           <Route path="follow-up" element={<FollowUp />} />
           <Route path="contratti" element={<Contratti />} />
           <Route path="archivio" element={<Archivio />} />
