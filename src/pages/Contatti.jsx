@@ -31,17 +31,32 @@ export default function Contatti() {
   async function loadContacts() {
     setLoading(true);
     setError(null);
-    const { data, error: err } = await supabase
-      .from("contacts")
-      .select(
-        "id, first_name, last_name, company, phone, landline_phone, email, address, city, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, call_outcome_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials), call_outcomes(name)"
-      )
-      .order("created_at", { ascending: false });
+    // Supabase restituisce al massimo 1000 righe per lettura: leggiamo pagina per
+    // pagina, così vengono caricati tutti i contatti anche quando sono molti di più.
+    const PAGE = 1000;
+    let all = [];
+    let err = null;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("contacts")
+        .select(
+          "id, first_name, last_name, company, phone, landline_phone, email, address, city, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, call_outcome_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials), call_outcomes(name)"
+        )
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) {
+        err = error;
+        break;
+      }
+      all = all.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
     if (err) {
       console.error(err);
       setError("Non sono riuscito a caricare i contatti.");
     } else {
-      setContacts(data || []);
+      setContacts(all);
     }
     setLoading(false);
   }
@@ -75,10 +90,14 @@ export default function Contatti() {
       if (filterStatus && c.status !== filterStatus) return false;
       if (filterCategory && c.professional_category_id !== filterCategory) return false;
       if (filterSource && c.lead_source_id !== filterSource) return false;
-      if (filterStage && c.pipeline_stage_id !== filterStage) return false;
+      if (filterStage === "__none__") {
+        if (c.pipeline_stage_id) return false;
+      } else if (filterStage && c.pipeline_stage_id !== filterStage) return false;
       if (filterOperator && c.operator_id !== filterOperator) return false;
       if (filterList && c.list_name !== filterList) return false;
-      if (filterCallOutcome && c.call_outcome_id !== filterCallOutcome) return false;
+      if (filterCallOutcome === "__none__") {
+        if (c.call_outcome_id) return false;
+      } else if (filterCallOutcome && c.call_outcome_id !== filterCallOutcome) return false;
       if (term) {
         const haystack = [c.first_name, c.last_name, c.company, c.email, c.phone, c.landline_phone, c.address, c.city]
           .filter(Boolean)
@@ -146,6 +165,7 @@ export default function Contatti() {
         </select>
         <select className="input max-w-[180px]" value={filterStage} onChange={(e) => setFilterStage(e.target.value)}>
           <option value="">Tutte le fasi</option>
+          <option value="__none__">Nessuna fase</option>
           {pipelineStages.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
@@ -177,6 +197,7 @@ export default function Contatti() {
           onChange={(e) => setFilterCallOutcome(e.target.value)}
         >
           <option value="">Tutti gli esiti chiamata</option>
+          <option value="__none__">Nessun esito (da chiamare)</option>
           {callOutcomes.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}
@@ -292,3 +313,4 @@ export default function Contatti() {
     </div>
   );
 }
+
