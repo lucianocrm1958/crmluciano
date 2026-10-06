@@ -76,6 +76,22 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
+  // Quando l'operatore registra un esito chiamata (es. "Non risponde") su un contatto
+  // che non ha ancora una fase, o che è ancora in "Nuovo contatto", la fase passa
+  // automaticamente a "Chiamata TMK": il contatto risulta così già lavorato.
+  // Le fasi successive (Appuntamento fissato, Proposta, ecc.) non vengono toccate.
+  function updateCallOutcome(value) {
+    setForm((f) => {
+      const next = { ...f, call_outcome_id: value };
+      if (!value) return next;
+      const tmkStage = pipelineStages.find((s) => /tmk/i.test(s.name));
+      const newStage = pipelineStages.find((s) => /nuovo/i.test(s.name));
+      const isEarly = !f.pipeline_stage_id || (newStage && f.pipeline_stage_id === newStage.id);
+      if (tmkStage && isEarly) next.pipeline_stage_id = tmkStage.id;
+      return next;
+    });
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.first_name.trim()) {
@@ -334,7 +350,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           <select
             className="input"
             value={form.call_outcome_id}
-            onChange={(e) => update("call_outcome_id", e.target.value)}
+            onChange={(e) => updateCallOutcome(e.target.value)}
           >
             <option value="">—</option>
             {callOutcomes.map((o) => (
@@ -499,4 +515,5 @@ function Field({ label, children }) {
     </label>
   );
 }
+
 
