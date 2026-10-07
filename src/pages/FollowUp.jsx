@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2 } from "lucide-react";
+import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2, Phone } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import FollowUpForm from "../components/FollowUpForm";
 import { formatDate } from "../lib/format";
@@ -18,7 +18,7 @@ export default function FollowUp() {
     setError(null);
     const { data, error: err } = await supabase
       .from("follow_ups")
-      .select("id, due_date, note, status, contact_id, operator_id, contacts(first_name, last_name, company, email), operators(initials)")
+      .select("id, due_date, note, status, contact_id, operator_id, contacts(first_name, last_name, company, email, phone, landline_phone), operators(initials)")
       .order("due_date", { ascending: true });
     if (err) {
       console.error(err);
@@ -220,6 +220,26 @@ function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail }) {
                   </span>
                 )}
               </p>
+              {(f.contacts?.phone || f.contacts?.landline_phone) && (
+                <p className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                  {[f.contacts?.phone, f.contacts?.landline_phone].filter(Boolean).map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      title="Chiama"
+                      onClick={(e) => {
+                        // Non apre la scheda del follow-up: avvia direttamente la chiamata
+                        // (da telefono) o l'app predefinita per le chiamate (da computer).
+                        e.stopPropagation();
+                        window.location.href = `tel:${num.replace(/\s+/g, "")}`;
+                      }}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800 hover:underline"
+                    >
+                      <Phone size={12} /> {num}
+                    </button>
+                  ))}
+                </p>
+              )}
               <p className="text-sm text-slate-600 truncate">{f.note}</p>
               <p className="text-xs text-slate-400 mt-0.5">{formatDate(f.due_date)}</p>
             </div>
@@ -252,3 +272,4 @@ function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail }) {
     </div>
   );
 }
+
