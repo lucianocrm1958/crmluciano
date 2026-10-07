@@ -3,12 +3,36 @@ import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2, Phone } from "luc
 import { supabase } from "../lib/supabaseClient";
 import FollowUpForm from "../components/FollowUpForm";
 import { formatDate } from "../lib/format";
+import { useSettings } from "../lib/useSettings";
+
+// Chiave per ricordare, su questo dispositivo, l'ultimo operatore scelto nel filtro.
+const OPERATOR_FILTER_KEY = "followup_filtro_operatore";
 
 export default function FollowUp() {
   const [followUps, setFollowUps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showCompleted, setShowCompleted] = useState(false);
+  const { operators } = useSettings();
+
+  // Filtro per operatore: "" = tutti, "__none__" = senza operatore, altrimenti id operatore.
+  // La scelta viene ricordata sul dispositivo, così ogni operatore ritrova i propri follow-up.
+  const [filterOperator, setFilterOperator] = useState(() => {
+    try {
+      return localStorage.getItem(OPERATOR_FILTER_KEY) || "";
+    } catch {
+      return "";
+    }
+  });
+
+  function changeOperatorFilter(value) {
+    setFilterOperator(value);
+    try {
+      localStorage.setItem(OPERATOR_FILTER_KEY, value);
+    } catch {
+      // memoria del browser non disponibile: il filtro funziona comunque
+    }
+  }
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingFollowUp, setEditingFollowUp] = useState(null);
@@ -33,17 +57,36 @@ export default function FollowUp() {
     loadFollowUps();
   }, []);
 
+  // Se l'operatore ricordato è stato eliminato dalle Impostazioni, torna a "Tutti".
+  useEffect(() => {
+    if (
+      operators.length > 0 &&
+      filterOperator &&
+      filterOperator !== "__none__" &&
+      !operators.some((o) => o.id === filterOperator)
+    ) {
+      changeOperatorFilter("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operators]);
+
   const today = new Date().toISOString().slice(0, 10);
 
+  const visibleFollowUps = useMemo(() => {
+    if (!filterOperator) return followUps;
+    if (filterOperator === "__none__") return followUps.filter((f) => !f.operator_id);
+    return followUps.filter((f) => f.operator_id === filterOperator);
+  }, [followUps, filterOperator]);
+
   const groups = useMemo(() => {
-    const open = followUps.filter((f) => f.status === "aperto");
+    const open = visibleFollowUps.filter((f) => f.status === "aperto");
     return {
       scaduti: open.filter((f) => f.due_date < today),
       oggi: open.filter((f) => f.due_date === today),
       prossimi: open.filter((f) => f.due_date > today),
-      completati: followUps.filter((f) => f.status === "completato"),
+      completati: visibleFollowUps.filter((f) => f.status === "completato"),
     };
-  }, [followUps, today]);
+  }, [visibleFollowUps, today]);
 
   async function toggleComplete(f) {
     const newStatus = f.status === "aperto" ? "completato" : "aperto";
@@ -110,12 +153,28 @@ export default function FollowUp() {
             {groups.scaduti.length + groups.oggi.length} da gestire ora · {groups.prossimi.length} in programma
           </p>
         </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            className="input max-w-[220px]"
+            value={filterOperator}
+            onChange={(e) => changeOperatorFilter(e.target.value)}
+            title="Filtra per operatore"
+          >
+            <option value="">Tutti gli operatori</option>
+            {operators.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.initials} {o.name ? `· ${o.name}` : ""}
+              </option>
+            ))}
+            <option value="__none__">Senza operatore</option>
+          </select>
         <button
           onClick={openNew}
           className="flex items-center gap-1.5 bg-navy-600 hover:bg-navy-700 text-white text-sm font-medium px-4 py-2 rounded-lg"
         >
           <Plus size={16} /> Nuovo follow-up
         </button>
+        </div>
       </div>
 
       <FollowUpGroup
@@ -272,4 +331,3 @@ function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail }) {
     </div>
   );
 }
-
