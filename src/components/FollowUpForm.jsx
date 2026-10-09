@@ -21,6 +21,7 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
   const [quickCompany, setQuickCompany] = useState("");
 
   const [dueDate, setDueDate] = useState(followUp?.due_date || new Date().toISOString().slice(0, 10));
+  const [dueTime, setDueTime] = useState(followUp?.due_time ? followUp.due_time.slice(0, 5) : "");
   const [note, setNote] = useState(followUp?.note || "");
   const [status, setStatus] = useState(followUp?.status || "aperto");
   const [operatorId, setOperatorId] = useState(followUp?.operator_id || "");
@@ -91,6 +92,7 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
     const payload = {
       contact_id: selectedContact.id,
       due_date: dueDate,
+      due_time: dueTime || null,
       note: note.trim(),
       status,
       operator_id: operatorId || null,
@@ -105,6 +107,7 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
         if (err) throw err;
       }
       onSaved?.();
+      window.dispatchEvent(new Event("followup-alerts-refresh"));
       onClose();
     } catch (err) {
       console.error(err);
@@ -230,10 +233,21 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
           <ContactNotesTimeline contactId={selectedContact.id} source="followup" defaultOperatorId={operatorId} />
         )}
 
-        <label className="block">
-          <span className="block text-xs font-medium text-slate-500 mb-1">Data promemoria *</span>
-          <input type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
-        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-xs font-medium text-slate-500 mb-1">Data promemoria *</span>
+            <input type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-slate-500 mb-1">Ora (avviso)</span>
+            <input type="time" className="input" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
+          </label>
+        </div>
+        {dueTime && (
+          <p className="text-[11px] text-slate-400 -mt-2">
+            All'ora indicata comparirà un avviso nel CRM all'operatore assegnato.
+          </p>
+        )}
 
         <label className="block">
           <span className="block text-xs font-medium text-slate-500 mb-1">Nota *</span>
