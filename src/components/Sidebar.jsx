@@ -14,6 +14,7 @@ import {
   UserCheck,
   LogOut,
   X,
+  Target,
 } from "lucide-react";
 
 const navItems = [
@@ -25,6 +26,7 @@ const navItems = [
   { to: "/statistiche", label: "Statistiche", icon: BarChart3 },
   { to: "/monitoraggio", label: "Monitoraggio operatori", icon: UserCheck },
   { to: "/follow-up", label: "Follow-up", icon: BellRing },
+  { to: "/campagne", label: "Campagne", icon: Target },
   { to: "/contratti", label: "Contratti", icon: FileSignature },
   { to: "/archivio", label: "Archivio", icon: Archive },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings },
