@@ -14,6 +14,7 @@ import Archivio from "./pages/Archivio";
 import Impostazioni from "./pages/Impostazioni";
 import Ricerca from "./pages/Ricerca";
 import Monitoraggio from "./pages/Monitoraggio";
+import Campagne from "./pages/Campagne";
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="statistiche" element={<Statistiche />} />
           <Route path="monitoraggio" element={<Monitoraggio />} />
           <Route path="follow-up" element={<FollowUp />} />
+          <Route path="campagne" element={<Campagne />} />
           <Route path="contratti" element={<Contratti />} />
           <Route path="archivio" element={<Archivio />} />
           <Route path="impostazioni" element={<Impostazioni />} />
