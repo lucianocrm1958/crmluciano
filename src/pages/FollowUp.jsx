@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2, Phone } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2, Phone, ClipboardCheck } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import FollowUpForm from "../components/FollowUpForm";
+import FollowUpOutcome from "../components/FollowUpOutcome";
 import { formatDate } from "../lib/format";
 import { useSettings } from "../lib/useSettings";
 
@@ -29,6 +31,8 @@ export default function FollowUp() {
     setFilterOperator(value);
     try {
       localStorage.setItem(OPERATOR_FILTER_KEY, value);
+      // gli avvisi di richiamo seguono l'operatore scelto qui
+      window.dispatchEvent(new Event("followup-alerts-refresh"));
     } catch {
       // memoria del browser non disponibile: il filtro funziona comunque
     }
@@ -36,14 +40,17 @@ export default function FollowUp() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingFollowUp, setEditingFollowUp] = useState(null);
+  // Follow-up di cui si sta registrando l'esito della chiamata.
+  const [outcomeFollowUp, setOutcomeFollowUp] = useState(null);
 
   async function loadFollowUps() {
     setLoading(true);
     setError(null);
     const { data, error: err } = await supabase
       .from("follow_ups")
-      .select("id, due_date, note, status, contact_id, operator_id, contacts(first_name, last_name, company, email, phone, landline_phone), operators(initials)")
-      .order("due_date", { ascending: true });
+      .select("id, due_date, due_time, note, status, contact_id, operator_id, contacts(first_name, last_name, company, email, phone, landline_phone, notes, pipeline_stage_id, call_outcome_id, call_outcomes(name)), operators(initials)")
+      .order("due_date", { ascending: true })
+      .order("due_time", { ascending: true, nullsFirst: false });
     if (err) {
       console.error(err);
       setError("Non sono riuscito a caricare i follow-up.");
@@ -56,6 +63,17 @@ export default function FollowUp() {
   useEffect(() => {
     loadFollowUps();
   }, []);
+
+  // Arrivando da un avviso di richiamo (pulsante "Esito"), apre subito l'esito di quel follow-up.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("esito");
+    if (!id || loading) return;
+    const f = followUps.find((x) => x.id === id);
+    if (f) setOutcomeFollowUp(f);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loading, followUps]);
 
   // Se l'operatore ricordato è stato eliminato dalle Impostazioni, torna a "Tutti".
   useEffect(() => {
@@ -184,6 +202,7 @@ export default function FollowUp() {
         onOpen={openEdit}
         onToggle={toggleComplete}
         onEmail={openEmailDraft}
+        onOutcome={setOutcomeFollowUp}
       />
       <FollowUpGroup
         title="Oggi"
@@ -192,6 +211,7 @@ export default function FollowUp() {
         onOpen={openEdit}
         onToggle={toggleComplete}
         onEmail={openEmailDraft}
+        onOutcome={setOutcomeFollowUp}
       />
       <FollowUpGroup
         title="Prossimi"
@@ -200,6 +220,7 @@ export default function FollowUp() {
         onOpen={openEdit}
         onToggle={toggleComplete}
         onEmail={openEmailDraft}
+        onOutcome={setOutcomeFollowUp}
       />
 
       <div>
@@ -218,6 +239,7 @@ export default function FollowUp() {
               onOpen={openEdit}
               onToggle={toggleComplete}
               onEmail={openEmailDraft}
+              onOutcome={setOutcomeFollowUp}
             />
           </div>
         )}
@@ -227,6 +249,14 @@ export default function FollowUp() {
         <div className="bg-white border border-dashed border-slate-300 rounded-xl p-10 text-center text-slate-400 text-sm">
           Nessun follow-up registrato ancora.
         </div>
+      )}
+
+      {outcomeFollowUp && (
+        <FollowUpOutcome
+          followUp={outcomeFollowUp}
+          onClose={() => setOutcomeFollowUp(null)}
+          onSaved={loadFollowUps}
+        />
       )}
 
       {formOpen && (
@@ -248,7 +278,7 @@ const TONE_STYLES = {
   muted: "border-l-slate-200 opacity-60",
 };
 
-function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail }) {
+function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail, onOutcome }) {
   if (items.length === 0 && title) return null;
   return (
     <div>
@@ -300,12 +330,30 @@ function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail }) {
                 </p>
               )}
               <p className="text-sm text-slate-600 truncate">{f.note}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{formatDate(f.due_date)}</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {formatDate(f.due_date)}
+                {f.due_time && (
+                  <span className="ml-1 font-semibold text-amber-600">ore {f.due_time.slice(0, 5)}</span>
+                )}
+                {f.contacts?.call_outcomes?.name && (
+                  <span className="ml-2 text-amber-600">Ultimo esito: {f.contacts.call_outcomes.name}</span>
+                )}
+              </p>
             </div>
             {f.operators?.initials && (
               <span className="w-6 h-6 rounded-full bg-navy-50 text-navy-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                 {f.operators.initials}
               </span>
+            )}
+            {f.status === "aperto" && (
+              <button
+                type="button"
+                onClick={() => onOutcome(f)}
+                className="flex items-center gap-1 text-xs font-medium text-white bg-navy-600 hover:bg-navy-700 px-2.5 py-1.5 rounded-lg flex-shrink-0"
+                title="Registra l'esito della chiamata"
+              >
+                <ClipboardCheck size={13} /> Esito
+              </button>
             )}
             {f.contacts?.email && f.status === "aperto" && (
               <div className="flex flex-col gap-1">
