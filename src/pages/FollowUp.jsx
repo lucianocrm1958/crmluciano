@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2, Phone, ClipboardCheck } from "lucide-react";
+import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2, Phone, ClipboardCheck, IdCard } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import FollowUpForm from "../components/FollowUpForm";
 import FollowUpOutcome from "../components/FollowUpOutcome";
+import ContactCardModal from "../components/ContactCardModal";
 import { formatDate } from "../lib/format";
 import { useSettings } from "../lib/useSettings";
 
@@ -42,6 +43,8 @@ export default function FollowUp() {
   const [editingFollowUp, setEditingFollowUp] = useState(null);
   // Follow-up di cui si sta registrando l'esito della chiamata.
   const [outcomeFollowUp, setOutcomeFollowUp] = useState(null);
+  // Scheda completa del cliente aperta direttamente da qui (id del contatto).
+  const [contactCardId, setContactCardId] = useState(null);
 
   async function loadFollowUps() {
     setLoading(true);
@@ -203,6 +206,7 @@ export default function FollowUp() {
         onToggle={toggleComplete}
         onEmail={openEmailDraft}
         onOutcome={setOutcomeFollowUp}
+        onContact={setContactCardId}
       />
       <FollowUpGroup
         title="Oggi"
@@ -212,6 +216,7 @@ export default function FollowUp() {
         onToggle={toggleComplete}
         onEmail={openEmailDraft}
         onOutcome={setOutcomeFollowUp}
+        onContact={setContactCardId}
       />
       <FollowUpGroup
         title="Prossimi"
@@ -221,6 +226,7 @@ export default function FollowUp() {
         onToggle={toggleComplete}
         onEmail={openEmailDraft}
         onOutcome={setOutcomeFollowUp}
+        onContact={setContactCardId}
       />
 
       <div>
@@ -240,6 +246,7 @@ export default function FollowUp() {
               onToggle={toggleComplete}
               onEmail={openEmailDraft}
               onOutcome={setOutcomeFollowUp}
+              onContact={setContactCardId}
             />
           </div>
         )}
@@ -249,6 +256,14 @@ export default function FollowUp() {
         <div className="bg-white border border-dashed border-slate-300 rounded-xl p-10 text-center text-slate-400 text-sm">
           Nessun follow-up registrato ancora.
         </div>
+      )}
+
+      {contactCardId && (
+        <ContactCardModal
+          contactId={contactCardId}
+          onClose={() => setContactCardId(null)}
+          onChanged={loadFollowUps}
+        />
       )}
 
       {outcomeFollowUp && (
@@ -278,7 +293,7 @@ const TONE_STYLES = {
   muted: "border-l-slate-200 opacity-60",
 };
 
-function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail, onOutcome }) {
+function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail, onOutcome, onContact }) {
   if (items.length === 0 && title) return null;
   return (
     <div>
@@ -345,37 +360,16 @@ function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail, onOutcom
                 {f.operators.initials}
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => onContact(f.contact_id)}
+              className="flex items-center gap-1 text-xs font-medium text-navy-600 border border-navy-200 hover:bg-navy-50 px-2.5 py-1.5 rounded-lg flex-shrink-0"
+              title="Apri la scheda completa del cliente: appuntamenti, follow-up e contratti"
+            >
+              <IdCard size={13} /> Scheda
+            </button>
             {f.status === "aperto" && (
               <button
                 type="button"
                 onClick={() => onOutcome(f)}
-                className="flex items-center gap-1 text-xs font-medium text-white bg-navy-600 hover:bg-navy-700 px-2.5 py-1.5 rounded-lg flex-shrink-0"
-                title="Registra l'esito della chiamata"
-              >
-                <ClipboardCheck size={13} /> Esito
-              </button>
-            )}
-            {f.contacts?.email && f.status === "aperto" && (
-              <div className="flex flex-col gap-1">
-                <button
-                  onClick={() => onEmail(f, "mailto")}
-                  className="text-xs text-navy-600 hover:text-navy-700 flex items-center gap-1"
-                  title="Apri con il client email predefinito (Outlook, ecc.)"
-                >
-                  <Mail size={13} /> Email
-                </button>
-                <button
-                  onClick={() => onEmail(f, "gmail")}
-                  className="text-xs text-slate-400 hover:text-slate-600"
-                  title="Apri in Gmail"
-                >
-                  via Gmail
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+                className="flex items-center gap-1 text-xs font-medium text-white bg-navy-600 hover:bg-navy-700 px-2.5 py
