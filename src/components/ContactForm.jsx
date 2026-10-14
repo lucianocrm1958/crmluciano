@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Modal from "./Modal";
 import ContactEmailLog from "./ContactEmailLog";
 import ContactNotesTimeline from "./ContactNotesTimeline";
-import AppointmentForm from "./AppointmentForm";
+import ContactActivity from "./ContactActivity";
 import { useSettings } from "../lib/useSettings";
-import { Loader2, Trash2, CalendarPlus } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 
 const emptyForm = {
   first_name: "",
@@ -40,6 +40,10 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
   } = useSettings();
 
   const isEdit = !!contact;
+  // Id univoco del modulo: se la stessa finestra è aperta due volte una sopra l'altra
+  // (es. appuntamento → scheda cliente → stesso appuntamento), il pulsante "Salva"
+  // deve salvare la finestra in primo piano e non quella sotto.
+  const formId = "contact-form-" + useId().replace(/[^a-zA-Z0-9]/g, "");
   const [form, setForm] = useState(() =>
     contact
       ? {
@@ -67,10 +71,47 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
   const [lostReasonId, setLostReasonId] = useState(contact?.lost_reason_id || "");
   const [callbackDate, setCallbackDate] = useState("");
   const [callbackNote, setCallbackNote] = useState("");
-  const [appointmentFormOpen, setAppointmentFormOpen] = useState(false);
+  // Diventa true se, dalla sezione "Attività del cliente", è stato salvato qualcosa
+  // (appuntamento, follow-up, contratto): alla chiusura della scheda la lista della
+  // pagina sottostante viene aggiornata.
+  const activityChangedRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+
+  function handleClose() {
+    if (activityChangedRef.current) onSaved?.();
+    onClose();
+  }
+
+  // Dopo aver salvato un appuntamento, un esito follow-up o un contratto dalla sezione
+  // "Attività del cliente", rilegge dal database i campi del contatto che quelle
+  // operazioni possono aver cambiato (fase pipeline, esito chiamata, telefono, ecc.),
+  // così salvando poi la scheda non si sovrascrivono con valori vecchi.
+  async function handleActivityChanged() {
+    activityChangedRef.current = true;
+    if (!contact?.id) return;
+    const { data, error: err } = await supabase
+      .from("contacts")
+      .select("pipeline_stage_id, call_outcome_id, phone, landline_phone, email, notes, status, lost_reason_id")
+      .eq("id", contact.id)
+      .single();
+    if (err || !data) return;
+    setForm((f) => ({
+      ...f,
+      pipeline_stage_id: data.pipeline_stage_id || "",
+      call_outcome_id: data.call_outcome_id || "",
+      phone: data.phone || "",
+      landline_phone: data.landline_phone || "",
+      email: data.email || "",
+      notes: data.notes || "",
+    }));
+    if (data.status) setStatus(data.status);
+    setLostReasonId(data.lost_reason_id || "");
+  }
+
+  const wonStageIds = pipelineStages.filter((s) => /vint/i.test(s.name)).map((s) => s.id);
+  const isWonStage = !!form.pipeline_stage_id && wonStageIds.includes(form.pipeline_stage_id);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -182,7 +223,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
 
   if (settingsLoading) {
     return (
-      <Modal title={isEdit ? "Modifica contatto" : "Nuovo contatto"} onClose={onClose}>
+      <Modal title={isEdit ? "Modifica contatto" : "Nuovo contatto"} onClose={handleClose}>
         <div className="flex items-center justify-center py-10 text-slate-400 gap-2">
           <Loader2 className="animate-spin" size={18} /> Caricamento...
         </div>
@@ -193,7 +234,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
   return (
     <Modal
       title={isEdit ? "Modifica contatto" : "Nuovo contatto"}
-      onClose={onClose}
+      onClose={handleClose}
       wide
       footer={
         <div className="flex items-center justify-between">
@@ -212,14 +253,14 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
             >
               Annulla
             </button>
             <button
               type="submit"
-              form="contact-form"
+              form={formId}
               disabled={saving}
               className="px-4 py-2 text-sm rounded-lg bg-navy-600 text-white hover:bg-navy-700 disabled:opacity-50 flex items-center gap-1.5"
             >
@@ -230,7 +271,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
         </div>
       }
     >
-      <form id="contact-form" onSubmit={handleSubmit} className="space-y-4">
+      <form id={formId} onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">
             {error}
@@ -362,18 +403,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
         </Field>
 
         {isEdit && (
-          <div className="bg-navy-50 border border-navy-100 rounded-lg p-3 flex items-center justify-between gap-3">
-            <p className="text-xs text-navy-700">
-              Il cliente ha fissato un appuntamento? Registralo subito, senza dover andare in "Appuntamenti".
-            </p>
-            <button
-              type="button"
-              onClick={() => setAppointmentFormOpen(true)}
-              className="shrink-0 flex items-center gap-1.5 text-xs font-medium bg-navy-600 hover:bg-navy-700 text-white px-3 py-1.5 rounded-lg"
-            >
-              <CalendarPlus size={14} /> Fissa appuntamento
-            </button>
-          </div>
+          <ContactActivity contact={contact} isWon={isWonStage} onChanged={handleActivityChanged} />
         )}
 
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
@@ -493,16 +523,6 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
         </div>
       </form>
 
-      {appointmentFormOpen && (
-        <AppointmentForm
-          presetContact={contact}
-          onClose={() => setAppointmentFormOpen(false)}
-          onSaved={() => {
-            setAppointmentFormOpen(false);
-            onSaved?.();
-          }}
-        />
-      )}
     </Modal>
   );
 }
