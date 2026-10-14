@@ -1,7 +1,7 @@
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Loader2, ChevronLeft, ChevronRight, MapPin, Video, LayoutList, CalendarDays, Ban, Search, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
-import Appointmentimport { useEffect, useMemo, useState } from "react";
-Form from "../components/AppointmentForm";
+import AppointmentForm from "../components/AppointmentForm";
 import UnavailabilityForm from "../components/UnavailabilityForm";
 import { startOfWeek, addDays, toISODate, WEEKDAY_LABELS, formatDayLabel, formatWeekRangeLabel } from "../lib/dateUtils";
 
