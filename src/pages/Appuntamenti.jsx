@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { Plus, Loader2, ChevronLeft, ChevronRight, MapPin, Video, LayoutList, CalendarDays, Ban } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, MapPin, Video, LayoutList, CalendarDays, Ban, Search, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
-import AppointmentForm from "../components/AppointmentForm";
+import Appointmentimport { useEffect, useMemo, useState } from "react";
+Form from "../components/AppointmentForm";
 import UnavailabilityForm from "../components/UnavailabilityForm";
 import { startOfWeek, addDays, toISODate, WEEKDAY_LABELS, formatDayLabel, formatWeekRangeLabel } from "../lib/dateUtils";
 
@@ -26,6 +26,9 @@ export default function Appuntamenti() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState("");
+  // Ricerca per nome/azienda/telefono del cliente: mostra subito tutti i suoi
+  // appuntamenti (passati e futuri), da cui si apre la finestra per esitarli.
+  const [search, setSearch] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
@@ -90,6 +93,23 @@ export default function Appuntamenti() {
     return appointments.filter((a) => a.status === statusFilter);
   }, [appointments, statusFilter]);
 
+  const searchTerm = search.trim().toLowerCase();
+  const searching = searchTerm.length >= 2;
+  const searchResults = useMemo(() => {
+    if (!searching) return [];
+    return appointments
+      .filter((a) => {
+        const c = a.contacts || {};
+        const haystack = [c.first_name, c.last_name, `${c.first_name || ""} ${c.last_name || ""}`, c.company, c.phone, c.email]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(searchTerm);
+      })
+      .slice()
+      .sort((x, y) => (x.appointment_date < y.appointment_date ? 1 : x.appointment_date > y.appointment_date ? -1 : 0));
+  }, [appointments, searching, searchTerm]);
+
   function openNew(presetDate) {
     setEditingAppointment(null);
     setNewAppointmentDate(presetDate || null);
@@ -153,12 +173,47 @@ export default function Appuntamenti() {
         </div>
       </div>
 
+      <div className="relative max-w-md">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          className="input pl-9 pr-9"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cerca un appuntamento per nome, azienda o telefono del cliente..."
+        />
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            title="Annulla ricerca"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center py-16 text-slate-400 gap-2">
           <Loader2 className="animate-spin" size={18} /> Caricamento...
         </div>
       ) : error ? (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3">{error}</div>
+      ) : searching ? (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">
+            {searchResults.length} appuntament{searchResults.length === 1 ? "o" : "i"} trovat
+            {searchResults.length === 1 ? "o" : "i"} — clicca su un appuntamento per aprirlo ed esitarlo.
+          </p>
+          {searchResults.length === 0 ? (
+            <div className="bg-white border border-dashed border-slate-300 rounded-xl p-10 text-center text-slate-400 text-sm">
+              Nessun appuntamento trovato per questo cliente.
+            </div>
+          ) : (
+            <AppointmentList items={searchResults} onOpen={openEdit} />
+          )}
+        </div>
       ) : view === "settimana" ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -262,44 +317,7 @@ export default function Appuntamenti() {
               Nessun appuntamento trovato.
             </div>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden">
-              {filteredList.map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => openEdit(a)}
-                  className="w-full text-left flex items-center justify-between px-4 py-3 hover:bg-navy-50"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="text-center w-14">
-                      <p className="text-sm font-semibold text-navy-700">
-                        {new Date(a.appointment_date).toLocaleDateString("it-IT", { day: "2-digit", month: "short" })}
-                      </p>
-                      <p className="text-xs text-slate-400">{a.appointment_time?.slice(0, 5)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">
-                        {a.contacts?.first_name} {a.contacts?.last_name || ""}
-                        {a.contacts?.company ? ` · ${a.contacts.company}` : ""}
-                      </p>
-                      <p className="text-xs text-slate-400 flex items-center gap-1">
-                        {a.mode === "online" ? <Video size={11} /> : <MapPin size={11} />}
-                        {a.mode === "online" ? "Online" : a.address || "In presenza"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {a.operators?.initials && (
-                      <span className="w-6 h-6 rounded-full bg-navy-50 text-navy-600 text-[10px] font-bold flex items-center justify-center">
-                        {a.operators.initials}
-                      </span>
-                    )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[a.status]}`}>
-                      {STATUS_LABELS[a.status]}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <AppointmentList items={filteredList} onOpen={openEdit} />
           )}
         </div>
       )}
@@ -323,6 +341,49 @@ export default function Appuntamenti() {
           onDeleted={loadBlocks}
         />
       )}
+    </div>
+  );
+}
+
+function AppointmentList({ items, onOpen }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden">
+      {items.map((a) => (
+        <button
+          key={a.id}
+          onClick={() => onOpen(a)}
+          className="w-full text-left flex items-center justify-between px-4 py-3 hover:bg-navy-50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="text-center w-14">
+              <p className="text-sm font-semibold text-navy-700">
+                {new Date(a.appointment_date).toLocaleDateString("it-IT", { day: "2-digit", month: "short" })}
+              </p>
+              <p className="text-xs text-slate-400">{a.appointment_time?.slice(0, 5)}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-800">
+                {a.contacts?.first_name} {a.contacts?.last_name || ""}
+                {a.contacts?.company ? ` · ${a.contacts.company}` : ""}
+              </p>
+              <p className="text-xs text-slate-400 flex items-center gap-1">
+                {a.mode === "online" ? <Video size={11} /> : <MapPin size={11} />}
+                {a.mode === "online" ? "Online" : a.address || "In presenza"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {a.operators?.initials && (
+              <span className="w-6 h-6 rounded-full bg-navy-50 text-navy-600 text-[10px] font-bold flex items-center justify-center">
+                {a.operators.initials}
+              </span>
+            )}
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[a.status]}`}>
+              {STATUS_LABELS[a.status]}
+            </span>
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
