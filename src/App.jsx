@@ -52,4 +52,10 @@ export default function App() {
           <Route path="campagne" element={<Campagne />} />
           <Route path="attivita" element={<AttivitaTelefoniste />} />
           <Route path="contratti" element={<Contratti />} />
-          <Route path="archivio" element={<Archivio />
+                   <Route path="archivio" element={<Archivio />} />
+          <Route path="impostazioni" element={<Impostazioni />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}
