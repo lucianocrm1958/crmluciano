@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
-import { Loader2, Trash2, Search, UserPlus, X } from "lucide-react";
+import { Loader2, Trash2, Search, UserPlus, X, Plus, CheckCircle2 } from "lucide-react";
 
 export default function ContractForm({ contract, presetContact, onClose, onSaved, onDeleted }) {
   const { productLines, products, pipelineStages, operators, loading: settingsLoading } = useSettings();
   const isEdit = !!contract;
+  // Id univoco del modulo, per non confondersi con altre finestre aperte sotto.
+  const formId = "contract-form-" + useId().replace(/[^a-zA-Z0-9]/g, "");
 
   const [selectedContact, setSelectedContact] = useState(
     contract?.contacts ? { id: contract.contact_id, ...contract.contacts } : presetContact || null
@@ -31,6 +33,21 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+
+  // Vendita con più prodotti: con "Salva e aggiungi un altro prodotto" il contratto
+  // appena compilato viene salvato e la finestra resta aperta, già pronta (stesso
+  // cliente, data e operatore) per il prodotto successivo. Qui teniamo l'elenco dei
+  // prodotti già salvati in questa sessione, da mostrare come conferma.
+  const [savedItems, setSavedItems] = useState([]);
+  const keepOpenRef = useRef(false);
+
+  // Se sono stati salvati prodotti con "Salva e aggiungi", la pagina sottostante
+  // viene aggiornata solo alla chiusura della finestra (così la finestra non si chiude
+  // da sola mentre si inserisce il prodotto successivo).
+  function handleClose() {
+    if (savedItems.length > 0) onSaved?.();
+    onClose();
+  }
 
   useEffect(() => {
     if (contactSearch.trim().length < 2) {
@@ -80,6 +97,8 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const keepOpen = keepOpenRef.current;
+    keepOpenRef.current = false;
     if (!selectedContact) {
       setError("Seleziona o crea un contatto per il contratto.");
       return;
@@ -129,6 +148,27 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
         if (stageErr) console.error(stageErr);
       }
 
+      if (keepOpen && !isEdit) {
+        const lineName = productLines.find((l) => l.id === productLineId)?.name || "";
+        const productName = products.find((p) => p.id === productId)?.name || "";
+        setSavedItems((items) => [
+          ...items,
+          {
+            label: [lineName, productName].filter(Boolean).join(" · "),
+            amount: Number(amount),
+            type: contractType,
+            excess: contractType === "rinnovo" && excessAmount !== "" ? Number(excessAmount) : 0,
+          },
+        ]);
+        // Pronto per il prodotto successivo: restano cliente, data, durata e operatore.
+        setProductLineId("");
+        setProductId("");
+        setContractType("nuovo");
+        setAmount("");
+        setExcessAmount("");
+        return;
+      }
+
       onSaved?.();
       onClose();
     } catch (err) {
@@ -155,7 +195,7 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
 
   if (settingsLoading) {
     return (
-      <Modal title={isEdit ? "Modifica contratto" : "Nuovo contratto"} onClose={onClose}>
+      <Modal title={isEdit ? "Modifica contratto" : "Nuovo contratto"} onClose={handleClose}>
         <div className="flex items-center justify-center py-10 text-slate-400 gap-2">
           <Loader2 className="animate-spin" size={18} /> Caricamento...
         </div>
@@ -166,7 +206,7 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
   return (
     <Modal
       title={isEdit ? "Modifica contratto" : "Nuovo contratto"}
-      onClose={onClose}
+      onClose={handleClose}
       wide
       footer={
         <div className="flex items-center justify-between">
@@ -177,11 +217,25 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
               </button>
             )}
           </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
-              Annulla
+          <div className="flex gap-2 flex-wrap justify-end">
+            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+              {savedItems.length > 0 ? "Chiudi" : "Annulla"}
             </button>
-            <button type="submit" form="contract-form" disabled={saving} className="px-4 py-2 text-sm rounded-lg bg-navy-600 text-white hover:bg-navy-700 disabled:opacity-50 flex items-center gap-1.5">
+            {!isEdit && (
+              <button
+                type="submit"
+                form={formId}
+                disabled={saving}
+                onClick={() => {
+                  keepOpenRef.current = true;
+                }}
+                className="px-4 py-2 text-sm rounded-lg border border-navy-200 text-navy-700 bg-white hover:bg-navy-50 disabled:opacity-50 flex items-center gap-1.5"
+                title="Salva questo prodotto e inserisci subito il successivo della stessa vendita"
+              >
+                <Plus size={14} /> Salva e aggiungi un altro prodotto
+              </button>
+            )}
+            <button type="submit" form={formId} disabled={saving} className="px-4 py-2 text-sm rounded-lg bg-navy-600 text-white hover:bg-navy-700 disabled:opacity-50 flex items-center gap-1.5">
               {saving && <Loader2 size={14} className="animate-spin" />}
               {saving ? "Salvataggio..." : "Salva"}
             </button>
@@ -189,9 +243,27 @@ export default function ContractForm({ contract, presetContact, onClose, onSaved
         </div>
       }
     >
-      <form id="contract-form" onSubmit={handleSubmit} className="space-y-4">
+      <form id={formId} onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{error}</div>
+        )}
+
+        {savedItems.length > 0 && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 space-y-1">
+            <p className="text-xs font-semibold text-emerald-700">
+              Già salvati in questa vendita ({savedItems.length}):
+            </p>
+            {savedItems.map((it, i) => (
+              <p key={i} className="text-xs text-emerald-700 flex items-center gap-1.5">
+                <CheckCircle2 size={12} className="flex-shrink-0" />
+                {it.label || "Prodotto"} · € {it.amount.toLocaleString("it-IT")} ·{" "}
+                {it.type === "nuovo" ? "Nuovo" : it.excess > 0 ? `Rinnovo (di cui Nuovo € ${it.excess.toLocaleString("it-IT")})` : "Rinnovo"}
+              </p>
+            ))}
+            <p className="text-[11px] text-emerald-600">
+              Compila qui sotto il prossimo prodotto, oppure premi "Chiudi" se hai finito.
+            </p>
+          </div>
         )}
 
         <div>
