@@ -6,11 +6,19 @@ export default function OperatorsList({ items, onChange }) {
   const [adding, setAdding] = useState(false);
   const [newInitials, setNewInitials] = useState("");
   const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editInitials, setEditInitials] = useState("");
   const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
+
+  // Email con cui l'operatore accede al CRM: serve a collegare il suo account
+  // alle sue iniziali, per la pagina "Attività telefoniste".
+  function cleanEmail(value) {
+    return value.trim().toLowerCase() || null;
+  }
 
   function cleanInitials(value) {
     return value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
@@ -24,7 +32,7 @@ export default function OperatorsList({ items, onChange }) {
     }
     setBusyId("new");
     setError(null);
-    const { error: err } = await supabase.from("operators").insert({ initials, name: newName.trim() || null });
+    const { error: err } = await supabase.from("operators").insert({ initials, name: newName.trim() || null, email: cleanEmail(newEmail) });
     setBusyId(null);
     if (err) {
       setError("Errore durante l'aggiunta: " + err.message);
@@ -32,6 +40,7 @@ export default function OperatorsList({ items, onChange }) {
     }
     setNewInitials("");
     setNewName("");
+    setNewEmail("");
     setAdding(false);
     onChange();
   }
@@ -40,6 +49,7 @@ export default function OperatorsList({ items, onChange }) {
     setEditingId(item.id);
     setEditInitials(item.initials);
     setEditName(item.name || "");
+    setEditEmail(item.email || "");
   }
 
   async function handleSaveEdit(id) {
@@ -52,7 +62,7 @@ export default function OperatorsList({ items, onChange }) {
     setError(null);
     const { error: err } = await supabase
       .from("operators")
-      .update({ initials, name: editName.trim() || null })
+      .update({ initials, name: editName.trim() || null, email: cleanEmail(editEmail) })
       .eq("id", id);
     setBusyId(null);
     if (err) {
@@ -83,7 +93,7 @@ export default function OperatorsList({ items, onChange }) {
         {items.map((item) => (
           <div key={item.id} className="flex items-center justify-between px-4 py-2.5 gap-2">
             {editingId === item.id ? (
-              <div className="flex items-center gap-2 flex-1">
+              <div className="flex items-center gap-2 flex-1 flex-wrap">
                 <input
                   className="input w-16 text-center font-semibold uppercase"
                   value={editInitials}
@@ -96,6 +106,13 @@ export default function OperatorsList({ items, onChange }) {
                   placeholder="Nome (facoltativo)"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
+                />
+                <input
+                  type="email"
+                  className="input flex-1"
+                  placeholder="Email di accesso al CRM"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
                 />
                 <button onClick={() => handleSaveEdit(item.id)} disabled={busyId === item.id} className="text-emerald-600 hover:text-emerald-700">
                   {busyId === item.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
@@ -110,7 +127,12 @@ export default function OperatorsList({ items, onChange }) {
                   <span className="w-8 h-8 rounded-full bg-navy-50 text-navy-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
                     {item.initials}
                   </span>
-                  <span className="text-sm text-slate-700 truncate">{item.name || "—"}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-700 truncate">{item.name || "—"}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {item.email || "Email di accesso non indicata"}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button onClick={() => startEdit(item)} className="text-slate-300 hover:text-navy-500 p-1">
@@ -131,7 +153,7 @@ export default function OperatorsList({ items, onChange }) {
 
       <div className="px-4 py-2.5 border-t border-slate-100">
         {adding ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <input
               className="input w-16 text-center font-semibold uppercase"
               placeholder="XX"
@@ -145,6 +167,13 @@ export default function OperatorsList({ items, onChange }) {
               placeholder="Nome (facoltativo)"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
+            />
+            <input
+              type="email"
+              className="input flex-1"
+              placeholder="Email di accesso al CRM"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             />
             <button onClick={handleAdd} disabled={busyId === "new"} className="text-emerald-600 hover:text-emerald-700">
