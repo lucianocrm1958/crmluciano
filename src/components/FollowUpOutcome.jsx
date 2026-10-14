@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
+import { logActivity } from "../lib/activityLog";
 import Modal from "./Modal";
 import AppointmentForm from "./AppointmentForm";
 import { Loader2 } from "lucide-react";
@@ -43,6 +44,12 @@ export default function FollowUpOutcome({ followUp, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [appointmentOpen, setAppointmentOpen] = useState(false);
+
+  // Monitoraggio: registra l'apertura dell'esito follow-up (chi, quando, quale contatto).
+  useEffect(() => {
+    logActivity("scheda", { source: "follow-up", contactId: followUp.contact_id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followUp.id]);
 
   function chooseOutcome(id) {
     setOutcomeId(id);
