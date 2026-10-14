@@ -1,10 +1,11 @@
-import { createElement, useEffect, useState } from "react";
+import { useId, createElement, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
 import ContactEmailLog from "./ContactEmailLog";
 import ContactNotesTimeline from "./ContactNotesTimeline";
-import { Loader2, Trash2, Search, UserPlus, X, MapPin, Plus, Phone, Mail, Clock, AlertTriangle, Pencil } from "lucide-react";
+import ContactCardModal from "./ContactCardModal";
+import { Loader2, Trash2, Search, UserPlus, X, MapPin, Plus, Phone, Mail, Clock, AlertTriangle, Pencil, IdCard } from "lucide-react";
 
 // Genera una chiave locale univoca per ogni riga prodotto dell'esito positivo,
 // prima ancora che venga salvata come contratto (che avrà un id vero del database).
@@ -28,9 +29,21 @@ function buildEmailLink(email) {
   return scheme + email;
 }
 
-export default function AppointmentForm({ appointment, presetContact, initialDate, onClose, onSaved, onDeleted }) {
+export default function AppointmentForm({
+  appointment,
+  presetContact,
+  initialDate,
+  hideContactLink = false,
+  onClose,
+  onSaved,
+  onDeleted,
+}) {
   const { operators, callOutcomes, productLines, products, pipelineStages } = useSettings();
   const isEdit = !!appointment;
+  // Id univoco del modulo: se la stessa finestra è aperta due volte una sopra l'altra
+  // (es. appuntamento → scheda cliente → stesso appuntamento), il pulsante "Salva"
+  // deve salvare la finestra in primo piano e non quella sotto.
+  const formId = "appointment-form-" + useId().replace(/[^a-zA-Z0-9]/g, "");
 
   const [selectedContact, setSelectedContact] = useState(
     appointment?.contacts
@@ -54,6 +67,10 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
   const [editEmail, setEditEmail] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [savingContactInfo, setSavingContactInfo] = useState(false);
+
+  // Apre la scheda completa del cliente (con appuntamenti, follow-up e contratti)
+  // sopra questo appuntamento, senza dover andare in "Contatti".
+  const [contactCardOpen, setContactCardOpen] = useState(false);
 
   const [date, setDate] = useState(
     appointment?.appointment_date || initialDate || new Date().toISOString().slice(0, 10)
@@ -526,7 +543,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
             </button>
             <button
               type="submit"
-              form="appointment-form"
+              form={formId}
               disabled={saving}
               className="px-4 py-2 text-sm rounded-lg bg-navy-600 text-white hover:bg-navy-700 disabled:opacity-50 flex items-center gap-1.5"
             >
@@ -537,7 +554,7 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         </div>
       }
     >
-            <form id="appointment-form" onSubmit={handleSubmit} className="space-y-4">
+            <form id={formId} onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{error}</div>
         )}
@@ -554,6 +571,16 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
                   {selectedContact.company && <p className="text-xs text-slate-500">{selectedContact.company}</p>}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {!hideContactLink && selectedContact.id && (
+                    <button
+                      type="button"
+                      onClick={() => setContactCardOpen(true)}
+                      className="flex items-center gap-1 text-xs font-medium text-navy-600 hover:text-navy-800 border border-navy-200 bg-white rounded-lg px-2 py-1"
+                      title="Apri la scheda completa del cliente"
+                    >
+                      <IdCard size={13} /> Scheda cliente
+                    </button>
+                  )}
                   {!editingContactInfo && (
                     <button
                       type="button"
@@ -1139,6 +1166,14 @@ export default function AppointmentForm({ appointment, presetContact, initialDat
         </label>
 
       </form>
+
+      {contactCardOpen && selectedContact?.id && (
+        <ContactCardModal
+          contactId={selectedContact.id}
+          onClose={() => setContactCardOpen(false)}
+          onChanged={() => onSaved?.()}
+        />
+      )}
     </Modal>
   );
 }
