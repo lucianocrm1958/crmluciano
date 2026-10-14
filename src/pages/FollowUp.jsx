@@ -372,4 +372,33 @@ function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail, onOutcom
               <button
                 type="button"
                 onClick={() => onOutcome(f)}
-                className="flex items-center gap-1 text-xs font-medium text-white bg-navy-600 hover:bg-navy-700 px-2.5 py
+                               className="flex items-center gap-1 text-xs font-medium text-white bg-navy-600 hover:bg-navy-700 px-2.5 py-1.5 rounded-lg flex-shrink-0"
+                title="Registra l'esito della chiamata"
+              >
+                <ClipboardCheck size={13} /> Esito
+              </button>
+            )}
+            {f.contacts?.email && f.status === "aperto" && (
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => onEmail(f, "mailto")}
+                  className="text-xs text-navy-600 hover:text-navy-700 flex items-center gap-1"
+                  title="Apri con il client email predefinito (Outlook, ecc.)"
+                >
+                  <Mail size={13} /> Email
+                </button>
+                <button
+                  onClick={() => onEmail(f, "gmail")}
+                  className="text-xs text-slate-400 hover:text-slate-600"
+                  title="Apri in Gmail"
+                >
+                  via Gmail
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
