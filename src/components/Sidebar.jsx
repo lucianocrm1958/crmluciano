@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useCurrentUser } from "../lib/activityLog";
+import ChangePasswordModal from "./ChangePasswordModal";
 import {
   LayoutDashboard,
   Users,
@@ -15,6 +18,8 @@ import {
   LogOut,
   X,
   Target,
+  Activity,
+  KeyRound,
 } from "lucide-react";
 
 const navItems = [
@@ -25,6 +30,8 @@ const navItems = [
   { to: "/appuntamenti", label: "Appuntamenti", icon: CalendarDays },
   { to: "/statistiche", label: "Statistiche", icon: BarChart3 },
   { to: "/monitoraggio", label: "Monitoraggio operatori", icon: UserCheck },
+  // Visibile solo all'amministratore (tabella crm_admins su Supabase)
+  { to: "/attivita", label: "Attività telefoniste", icon: Activity, adminOnly: true },
   { to: "/follow-up", label: "Follow-up", icon: BellRing },
   { to: "/campagne", label: "Campagne", icon: Target },
   { to: "/contratti", label: "Contratti", icon: FileSignature },
@@ -33,6 +40,9 @@ const navItems = [
 ];
 
 export default function Sidebar({ open, onClose }) {
+  const { email, isAdmin } = useCurrentUser();
+  const [passwordOpen, setPasswordOpen] = useState(false);
+
   return (
     <>
       {/* Overlay mobile */}
@@ -66,7 +76,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-          {navItems.map(({ to, label, icon: Icon, end }) => (
+          {navItems.filter((item) => !item.adminOnly || isAdmin).map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -87,6 +97,18 @@ export default function Sidebar({ open, onClose }) {
         </nav>
 
         <div className="px-3 py-4 border-t border-navy-600/60">
+          {email && (
+            <p className="text-navy-300 text-xs px-3 mb-2 truncate" title={email}>
+              Connesso come <span className="text-white">{email}</span>
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => setPasswordOpen(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-navy-200 hover:bg-navy-600/60 hover:text-white transition-colors"
+          >
+            <KeyRound size={18} strokeWidth={2} /> Cambia password
+          </button>
           <button
             type="button"
             onClick={() => supabase.auth.signOut()}
@@ -97,6 +119,8 @@ export default function Sidebar({ open, onClose }) {
           <p className="text-navy-400 text-xs mt-3 px-3">CRM personale · uso interno</p>
         </div>
       </aside>
+
+      {passwordOpen && <ChangePasswordModal onClose={() => setPasswordOpen(false)} />}
     </>
   );
 }
