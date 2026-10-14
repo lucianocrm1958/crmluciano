@@ -1,10 +1,11 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Modal from "./Modal";
 import ContactEmailLog from "./ContactEmailLog";
 import ContactNotesTimeline from "./ContactNotesTimeline";
 import ContactActivity from "./ContactActivity";
 import { useSettings } from "../lib/useSettings";
+import { logActivity } from "../lib/activityLog";
 import { Loader2, Trash2 } from "lucide-react";
 
 const emptyForm = {
@@ -75,6 +76,12 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
   // (appuntamento, follow-up, contratto): alla chiusura della scheda la lista della
   // pagina sottostante viene aggiornata.
   const activityChangedRef = useRef(false);
+
+  // Monitoraggio: registra l'apertura della scheda (chi, quando, quale contatto).
+  useEffect(() => {
+    if (contact?.id) logActivity("scheda", { source: "contatto", contactId: contact.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contact?.id]);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
