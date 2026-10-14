@@ -35,7 +35,7 @@ export function useSettings() {
         supabase.from("pipeline_stages").select("id, name, order_index, color").order("order_index"),
         supabase.from("product_lines").select("id, name").order("name"),
         supabase.from("lost_reasons").select("id, name").order("name"),
-        supabase.from("operators").select("id, initials, name").order("initials"),
+        supabase.from("operators").select("id, initials, name, email").order("initials"),
         supabase.from("call_outcomes").select("id, name").order("name"),
         supabase.from("products").select("id, name, product_line_id").order("name"),
       ]);
