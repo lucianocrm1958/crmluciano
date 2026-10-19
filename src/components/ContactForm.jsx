@@ -71,6 +71,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
   const [status, setStatus] = useState(contact?.status || "attivo");
   const [lostReasonId, setLostReasonId] = useState(contact?.lost_reason_id || "");
   const [callbackDate, setCallbackDate] = useState("");
+  const [callbackTime, setCallbackTime] = useState("");
   const [callbackNote, setCallbackNote] = useState("");
   // Diventa true se, dalla sezione "Attività del cliente", è stato salvato qualcosa
   // (appuntamento, follow-up, contratto): alla chiusura della scheda la lista della
@@ -192,15 +193,20 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
         contactId = inserted?.id || null;
       }
 
-      if (callbackDate && contactId) {
+      // Richiamo: se è indicata solo l'ora (senza data) il richiamo è per oggi.
+      const callbackDay = callbackDate || (callbackTime ? new Date().toLocaleDateString("sv-SE") : "");
+      if (callbackDay && contactId) {
         const { error: followUpErr } = await supabase.from("follow_ups").insert({
           contact_id: contactId,
-          due_date: callbackDate,
+          due_date: callbackDay,
+          due_time: callbackTime || null,
           note: callbackNote.trim() || "Richiamare il cliente",
           status: "aperto",
           operator_id: form.operator_id || null,
         });
         if (followUpErr) throw followUpErr;
+        // Aggiorna subito gli avvisi di richiamo all'ora fissata.
+        window.dispatchEvent(new Event("followup-alerts-refresh"));
       }
 
       onSaved?.();
@@ -415,7 +421,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
 
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
           <p className="text-xs text-amber-700">
-            Se il cliente ti ha chiesto di essere richiamato, indica qui la data: al salvataggio verrà creato
+            Se il cliente ti ha chiesto di essere richiamato, indica qui giorno e ora: al salvataggio verrà creato
             automaticamente un promemoria nella sezione Follow-up, senza bisogno di inserirlo di nuovo lì.
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -427,15 +433,29 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
                 onChange={(e) => setCallbackDate(e.target.value)}
               />
             </Field>
-            <Field label="Motivo/nota richiamo (facoltativo)">
+            <Field label="Alle ore (facoltativo)">
               <input
+                type="time"
                 className="input"
-                value={callbackNote}
-                onChange={(e) => setCallbackNote(e.target.value)}
-                placeholder="Es. Richiamare per confermare offerta"
+                value={callbackTime}
+                onChange={(e) => setCallbackTime(e.target.value)}
               />
             </Field>
           </div>
+          <Field label="Motivo/nota richiamo (facoltativo)">
+            <input
+              className="input"
+              value={callbackNote}
+              onChange={(e) => setCallbackNote(e.target.value)}
+              placeholder="Es. Richiamare per confermare offerta"
+            />
+          </Field>
+          {callbackTime && (
+            <p className="text-[11px] text-amber-700">
+              All'ora indicata comparirà un avviso nel CRM all'operatore del contatto
+              {callbackDate ? "" : " (senza data, il richiamo è fissato per oggi)"}.
+            </p>
+          )}
         </div>
 
         <Field label="Fase pipeline">
@@ -542,5 +562,6 @@ function Field({ label, children }) {
     </label>
   );
 }
+
 
 
