@@ -7,6 +7,13 @@ import ContactForm from "../components/ContactForm";
 import ImportContacts from "../components/ImportContacts";
 import { formatCurrency } from "../lib/format";
 
+const CONTACT_FIELDS =
+  "id, first_name, last_name, company, phone, landline_phone, email, address, city, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, call_outcome_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials), call_outcomes(name)";
+
+// Quante righe mostrare a schermo per volta: disegnare migliaia di righe insieme
+// rende la pagina lenta e ritarda l'apertura delle schede.
+const ROWS_STEP = 100;
+
 export default function Contatti() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { professionalCategories, leadSources, pipelineStages, operators, callOutcomes } = useSettings();
@@ -27,6 +34,7 @@ export default function Contatti() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(ROWS_STEP);
 
   async function loadContacts() {
     setLoading(true);
@@ -39,9 +47,7 @@ export default function Contatti() {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from("contacts")
-        .select(
-          "id, first_name, last_name, company, phone, landline_phone, email, address, city, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, call_outcome_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials), call_outcomes(name)"
-        )
+        .select(CONTACT_FIELDS)
         .order("created_at", { ascending: false })
         .order("id", { ascending: true })
         .range(from, from + PAGE - 1);
@@ -64,6 +70,27 @@ export default function Contatti() {
   useEffect(() => {
     loadContacts();
   }, []);
+
+  // Dopo il salvataggio di una scheda rilegge SOLO quel contatto, invece di
+  // ricaricare dal database l'intero elenco (migliaia di righe) a ogni chiamata.
+  async function refreshContact(id) {
+    if (!id) return loadContacts();
+    const { data, error: err } = await supabase.from("contacts").select(CONTACT_FIELDS).eq("id", id).maybeSingle();
+    if (err) {
+      console.error(err);
+      return;
+    }
+    setContacts((list) => {
+      if (!data) return list.filter((c) => c.id !== id);
+      const exists = list.some((c) => c.id === id);
+      return exists ? list.map((c) => (c.id === id ? data : c)) : [data, ...list];
+    });
+  }
+
+  function removeContact(id) {
+    if (!id) return loadContacts();
+    setContacts((list) => list.filter((c) => c.id !== id));
+  }
 
   useEffect(() => {
     const id = searchParams.get("id");
@@ -108,6 +135,12 @@ export default function Contatti() {
       return true;
     });
   }, [contacts, search, filterCategory, filterSource, filterStage, filterStatus, filterOperator, filterList, filterCallOutcome]);
+
+  useEffect(() => {
+    setVisibleCount(ROWS_STEP);
+  }, [search, filterCategory, filterSource, filterStage, filterStatus, filterOperator, filterList, filterCallOutcome]);
+
+  const visible = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
   function openNew() {
     setEditingContact(null);
@@ -226,7 +259,7 @@ export default function Contatti() {
             <span>Fase / Valore</span>
           </div>
           <div className="divide-y divide-slate-100">
-            {filtered.map((c) => (
+            {visible.map((c) => (
               <button
                 key={c.id}
                 onClick={() => openEdit(c)}
@@ -295,6 +328,19 @@ export default function Contatti() {
               </button>
             ))}
           </div>
+          {filtered.length > visible.length && (
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>
+                Mostrati {visible.length} di {filtered.length}. Usa la ricerca o i filtri per trovare prima un contatto.
+              </span>
+              <button
+                onClick={() => setVisibleCount((n) => n + ROWS_STEP * 2)}
+                className="text-navy-600 hover:text-navy-700 font-medium"
+              >
+                Mostra altri
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -302,8 +348,8 @@ export default function Contatti() {
         <ContactForm
           contact={editingContact}
           onClose={() => setFormOpen(false)}
-          onSaved={loadContacts}
-          onDeleted={loadContacts}
+          onSaved={refreshContact}
+          onDeleted={removeContact}
         />
       )}
 
@@ -313,4 +359,5 @@ export default function Contatti() {
     </div>
   );
 }
+
 
