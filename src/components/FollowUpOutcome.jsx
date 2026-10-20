@@ -81,12 +81,6 @@ export default function FollowUpOutcome({ followUp, onClose, onSaved }) {
       const isEarly = !currentStage || (newStage && currentStage === newStage.id);
       if (tmkStage && isEarly) contactUpdate.pipeline_stage_id = tmkStage.id;
 
-      const { error: contactErr } = await supabase
-        .from("contacts")
-        .update(contactUpdate)
-        .eq("id", followUp.contact_id);
-      if (contactErr) throw contactErr;
-
       // 2. Riga nel diario note del contatto.
       let body = `Esito chiamata: ${outcomeName}`;
       if (note.trim()) body += ` — ${note.trim()}`;
@@ -94,33 +88,36 @@ export default function FollowUpOutcome({ followUp, onClose, onSaved }) {
         const [y, m, d] = callbackDate.split("-");
         body += ` (da richiamare il ${d}/${m}/${y}${callbackTime ? ` alle ${callbackTime}` : ""})`;
       }
-      const { error: noteErr } = await supabase.from("contact_notes").insert({
-        contact_id: followUp.contact_id,
-        body,
-        operator_id: operatorId || null,
-        source: "followup",
-      });
-      if (noteErr) throw noteErr;
 
-      // 3. Il follow-up chiamato è fatto.
-      const { error: fuErr } = await supabase
-        .from("follow_ups")
-        .update({ status: "completato" })
-        .eq("id", followUp.id);
-      if (fuErr) throw fuErr;
-
+      // Le scritture sono indipendenti tra loro: vengono inviate tutte insieme
+      // invece che una dopo l'altra, così il salvataggio è molto più rapido.
+      const writes = [
+        supabase.from("contacts").update(contactUpdate).eq("id", followUp.contact_id),
+        supabase.from("contact_notes").insert({
+          contact_id: followUp.contact_id,
+          body,
+          operator_id: operatorId || null,
+          source: "followup",
+        }),
+        // 3. Il follow-up chiamato è fatto.
+        supabase.from("follow_ups").update({ status: "completato" }).eq("id", followUp.id),
+      ];
       // 4. Eventuale nuovo follow-up per richiamare.
       if (nextStep === "richiama") {
-        const { error: newFuErr } = await supabase.from("follow_ups").insert({
-          contact_id: followUp.contact_id,
-          due_date: callbackDate,
-          due_time: callbackTime || null,
-          note: callbackNote.trim() || `Richiamare (${outcomeName})`,
-          status: "aperto",
-          operator_id: operatorId || null,
-        });
-        if (newFuErr) throw newFuErr;
+        writes.push(
+          supabase.from("follow_ups").insert({
+            contact_id: followUp.contact_id,
+            due_date: callbackDate,
+            due_time: callbackTime || null,
+            note: callbackNote.trim() || `Richiamare (${outcomeName})`,
+            status: "aperto",
+            operator_id: operatorId || null,
+          })
+        );
       }
+      const results = await Promise.all(writes);
+      const failed = results.find((r) => r.error);
+      if (failed) throw failed.error;
 
       setSaving(false);
       onSaved?.();
@@ -306,3 +303,4 @@ export default function FollowUpOutcome({ followUp, onClose, onSaved }) {
     </Modal>
   );
 }
+
