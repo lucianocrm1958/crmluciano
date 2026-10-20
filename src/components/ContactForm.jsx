@@ -88,7 +88,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
   const [error, setError] = useState(null);
 
   function handleClose() {
-    if (activityChangedRef.current) onSaved?.();
+    if (activityChangedRef.current) onSaved?.(contact?.id);
     onClose();
   }
 
@@ -209,7 +209,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
         window.dispatchEvent(new Event("followup-alerts-refresh"));
       }
 
-      onSaved?.();
+      onSaved?.(contactId);
       onClose();
     } catch (err) {
       console.error(err);
@@ -225,7 +225,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
     try {
       const { error: err } = await supabase.from("contacts").delete().eq("id", contact.id);
       if (err) throw err;
-      onDeleted?.();
+      onDeleted?.(contact.id);
       onClose();
     } catch (err) {
       console.error(err);
@@ -562,6 +562,7 @@ function Field({ label, children }) {
     </label>
   );
 }
+
 
 
 
