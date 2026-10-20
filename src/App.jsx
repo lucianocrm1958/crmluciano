@@ -1,21 +1,54 @@
+import { lazy } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "./lib/useAuth";
 import Login from "./components/Login";
 import Layout from "./components/Layout";
-import Dashboard from "./pages/Dashboard";
-import Contatti from "./pages/Contatti";
-import Pipeline from "./pages/Pipeline";
-import Appuntamenti from "./pages/Appuntamenti";
-import Statistiche from "./pages/Statistiche";
-import FollowUp from "./pages/FollowUp";
-import Contratti from "./pages/Contratti";
-import Archivio from "./pages/Archivio";
-import Impostazioni from "./pages/Impostazioni";
-import Ricerca from "./pages/Ricerca";
-import Monitoraggio from "./pages/Monitoraggio";
-import Campagne from "./pages/Campagne";
-import AttivitaTelefoniste from "./pages/AttivitaTelefoniste";
+
+// Le pagine vengono scaricate solo quando servono: all'accesso il browser
+// scarica meno codice e il CRM si apre prima.
+// Se il CRM è stato aggiornato mentre la scheda del browser era aperta, la vecchia
+// versione della pagina non esiste più: in quel caso si ricarica da sola (una volta).
+function lazyPage(loader) {
+  return lazy(() =>
+    loader()
+      .then((mod) => {
+        try {
+          sessionStorage.removeItem("crm_reload_after_update");
+        } catch {
+          /* niente */
+        }
+        return mod;
+      })
+      .catch((err) => {
+        let alreadyReloaded = false;
+        try {
+          alreadyReloaded = sessionStorage.getItem("crm_reload_after_update") === "1";
+          sessionStorage.setItem("crm_reload_after_update", "1");
+        } catch {
+          /* niente */
+        }
+        if (!alreadyReloaded) {
+          window.location.reload();
+          return new Promise(() => {});
+        }
+        throw err;
+      })
+  );
+}
+const Dashboard = lazyPage(() => import("./pages/Dashboard"));
+const Contatti = lazyPage(() => import("./pages/Contatti"));
+const Pipeline = lazyPage(() => import("./pages/Pipeline"));
+const Appuntamenti = lazyPage(() => import("./pages/Appuntamenti"));
+const Statistiche = lazyPage(() => import("./pages/Statistiche"));
+const FollowUp = lazyPage(() => import("./pages/FollowUp"));
+const Contratti = lazyPage(() => import("./pages/Contratti"));
+const Archivio = lazyPage(() => import("./pages/Archivio"));
+const Impostazioni = lazyPage(() => import("./pages/Impostazioni"));
+const Ricerca = lazyPage(() => import("./pages/Ricerca"));
+const Monitoraggio = lazyPage(() => import("./pages/Monitoraggio"));
+const Campagne = lazyPage(() => import("./pages/Campagne"));
+const AttivitaTelefoniste = lazyPage(() => import("./pages/AttivitaTelefoniste"));
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -52,10 +85,11 @@ export default function App() {
           <Route path="campagne" element={<Campagne />} />
           <Route path="attivita" element={<AttivitaTelefoniste />} />
           <Route path="contratti" element={<Contratti />} />
-                   <Route path="archivio" element={<Archivio />} />
+          <Route path="archivio" element={<Archivio />} />
           <Route path="impostazioni" element={<Impostazioni />} />
         </Route>
       </Routes>
     </BrowserRouter>
   );
 }
+
