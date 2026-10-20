@@ -111,7 +111,7 @@ export default function Sidebar({ open, onClose }) {
           </button>
           <button
             type="button"
-            onClick={() => supabase.auth.signOut()}
+            onClick={() => supabase.auth.signOut({ scope: "local" })}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-navy-200 hover:bg-navy-600/60 hover:text-white transition-colors"
           >
             <LogOut size={18} strokeWidth={2} /> Esci
@@ -124,3 +124,4 @@ export default function Sidebar({ open, onClose }) {
     </>
   );
 }
+
