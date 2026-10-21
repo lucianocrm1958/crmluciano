@@ -486,6 +486,18 @@ export default function AppointmentForm({
         const { data, error: err } = await supabase.from("appointments").insert(payload).select().single();
         if (err) throw err;
         appointmentId = data.id;
+
+        // Appuntamento fissato: i richiami ancora aperti per questo cliente, con data
+        // fino al giorno dell'appuntamento, non servono più e vengono chiusi.
+        // Restano aperti solo eventuali follow-up programmati DOPO l'appuntamento.
+        const { error: fuErr } = await supabase
+          .from("follow_ups")
+          .update({ status: "completato" })
+          .eq("contact_id", selectedContact.id)
+          .eq("status", "aperto")
+          .lte("due_date", date);
+        if (fuErr) console.warn("Chiusura follow-up dopo appuntamento:", fuErr.message);
+        else window.dispatchEvent(new Event("followup-alerts-refresh"));
       }
 
       await syncLinkedContracts(appointmentId, validLines);
@@ -1199,3 +1211,4 @@ function splitAddress(fullAddress) {
   }
   return { street: value, civico: "" };
 }
+
