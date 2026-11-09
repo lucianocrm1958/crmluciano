@@ -1,4 +1,4 @@
-ort { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2, Phone, ClipboardCheck, IdCard, CalendarPlus } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
