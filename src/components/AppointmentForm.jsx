@@ -91,6 +91,17 @@ export default function AppointmentForm({
   const [resultLines, setResultLines] = useState([]);
   const [linesReady, setLinesReady] = useState(!isEdit);
 
+  // Esito "pending": la trattativa resta aperta. Da qui si aggiornano subito fase
+  // pipeline, valore stimato e linea di prodotto del contatto, e si può fissare il
+  // prossimo richiamo, senza dover uscire e andare in Contatti o in Follow-up.
+  const [pendingStageId, setPendingStageId] = useState("");
+  const [pendingValue, setPendingValue] = useState("");
+  const [pendingProductLineId, setPendingProductLineId] = useState("");
+  const [pendingFuDate, setPendingFuDate] = useState("");
+  const [pendingFuTime, setPendingFuTime] = useState("");
+  const [pendingFuNote, setPendingFuNote] = useState("");
+  const [pendingLoadedFor, setPendingLoadedFor] = useState(null);
+
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
@@ -292,6 +303,63 @@ export default function AppointmentForm({
 
   function updateResultLine(key, field, value) {
     setResultLines((lines) => lines.map((l) => (l.key === key ? { ...l, [field]: value } : l)));
+  }
+
+  // Quando si sceglie l'esito "pending", precompila fase, valore e linea di prodotto
+  // con i dati attuali del contatto. Se il contatto è ancora in una fase iniziale
+  // (o senza fase), propone direttamente la fase "Trattativa".
+  useEffect(() => {
+    if (status !== "svolto" || result !== "pending" || !selectedContact?.id) return;
+    if (pendingLoadedFor === selectedContact.id || pipelineStages.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error: err } = await supabase
+        .from("contacts")
+        .select("pipeline_stage_id, estimated_value, estimated_product_line_id")
+        .eq("id", selectedContact.id)
+        .single();
+      if (cancelled) return;
+      if (err) console.error(err);
+      const earlyNames = ["Nuovo contatto", "Chiamata TMK", "Appuntamento fissato"];
+      const current = pipelineStages.find((st) => st.id === data?.pipeline_stage_id);
+      const trattativa = pipelineStages.find((st) => st.name === "Trattativa");
+      const isOpenAdvanced =
+        current && !earlyNames.includes(current.name) && !PENDING_CLOSED_STAGES.includes(current.name);
+      setPendingStageId(isOpenAdvanced ? current.id : trattativa?.id || data?.pipeline_stage_id || "");
+      setPendingValue(data?.estimated_value ?? "");
+      setPendingProductLineId(data?.estimated_product_line_id || "");
+      setPendingLoadedFor(selectedContact.id);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, result, selectedContact?.id, pipelineStages, pendingLoadedFor]);
+
+  // Salva sul contatto i dati della trattativa e, se indicata una data, crea il richiamo.
+  async function savePendingDeal() {
+    const { error: cErr } = await supabase
+      .from("contacts")
+      .update({
+        pipeline_stage_id: pendingStageId || null,
+        estimated_value: pendingValue === "" ? null : Number(pendingValue),
+        estimated_product_line_id: pendingProductLineId || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedContact.id);
+    if (cErr) throw cErr;
+
+    if (pendingFuDate) {
+      const { error: fErr } = await supabase.from("follow_ups").insert({
+        contact_id: selectedContact.id,
+        due_date: pendingFuDate,
+        due_time: pendingFuTime || null,
+        note: pendingFuNote.trim() || "Ricontatto dopo appuntamento (esito pending)",
+        status: "aperto",
+        operator_id: operatorId || null,
+      });
+      if (fErr) throw fErr;
+      window.dispatchEvent(new Event("followup-alerts-refresh"));
+    }
   }
 
   async function handleQuickAddContact() {
@@ -501,6 +569,10 @@ export default function AppointmentForm({
       }
 
       await syncLinkedContracts(appointmentId, validLines);
+
+      if (status === "svolto" && result === "pending") {
+        await savePendingDeal();
+      }
 
       onSaved?.();
       onClose();
@@ -1153,6 +1225,90 @@ export default function AppointmentForm({
                 )}
               </div>
             )}
+
+            {result === "pending" && (
+              <div className="space-y-3">
+                <span className="block text-xs font-medium text-slate-500">
+                  Trattativa in corso (aggiorna direttamente il contatto e la Pipeline)
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block col-span-2">
+                    <span className="block text-[11px] text-slate-400 mb-0.5">Fase pipeline</span>
+                    <select
+                      className="input"
+                      value={pendingStageId}
+                      onChange={(e) => setPendingStageId(e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {pipelineStages
+                        .filter((st) => !PENDING_CLOSED_STAGES.includes(st.name))
+                        .map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="block text-[11px] text-slate-400 mb-0.5">Valore trattativa (€)</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="input"
+                      value={pendingValue}
+                      onChange={(e) => setPendingValue(e.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-[11px] text-slate-400 mb-0.5">Linea di prodotto</span>
+                    <select
+                      className="input"
+                      value={pendingProductLineId}
+                      onChange={(e) => setPendingProductLineId(e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {productLines.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <span className="block text-xs font-medium text-slate-500 pt-1">
+                  Prossimo richiamo (facoltativo: crea un follow-up)
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="block text-[11px] text-slate-400 mb-0.5">Data</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={pendingFuDate}
+                      onChange={(e) => setPendingFuDate(e.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-[11px] text-slate-400 mb-0.5">Ora</span>
+                    <input
+                      type="time"
+                      className="input"
+                      value={pendingFuTime}
+                      onChange={(e) => setPendingFuTime(e.target.value)}
+                    />
+                  </label>
+                  <label className="block col-span-2">
+                    <span className="block text-[11px] text-slate-400 mb-0.5">Nota richiamo</span>
+                    <input
+                      className="input"
+                      placeholder="Es. attende approvazione del socio"
+                      value={pendingFuNote}
+                      onChange={(e) => setPendingFuNote(e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1189,6 +1345,9 @@ export default function AppointmentForm({
     </Modal>
   );
 }
+
+// Fasi "chiuse" escluse dalla scelta quando l'esito è pending (la trattativa è ancora aperta).
+const PENDING_CLOSED_STAGES = ["Chiuso vinto", "Chiuso perso"];
 
 // Unisce via/piazza e numero civico in un'unica stringa da salvare/aprire su mappa.
 function combineAddress(street, civico) {
