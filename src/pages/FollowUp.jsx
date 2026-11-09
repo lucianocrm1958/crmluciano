@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+ort { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2, Phone, ClipboardCheck, IdCard } from "lucide-react";
+import { Plus, Loader2, Mail, CheckCircle2, Circle, Building2, Phone, ClipboardCheck, IdCard, CalendarPlus } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import FollowUpForm from "../components/FollowUpForm";
 import FollowUpOutcome from "../components/FollowUpOutcome";
@@ -43,11 +43,25 @@ export default function FollowUp() {
   const [editingFollowUp, setEditingFollowUp] = useState(null);
   // Follow-up di cui si sta registrando l'esito della chiamata.
   const [outcomeFollowUp, setOutcomeFollowUp] = useState(null);
+  // "appuntamento" quando si è premuto il pulsante Appuntamento invece di Esito.
+  const [outcomeMode, setOutcomeMode] = useState(null);
+
+  function openOutcome(f) {
+    setOutcomeMode(null);
+    setOutcomeFollowUp(f);
+  }
+
+  function openAppointment(f) {
+    setOutcomeMode("appuntamento");
+    setOutcomeFollowUp(f);
+  }
   // Scheda completa del cliente aperta direttamente da qui (id del contatto).
   const [contactCardId, setContactCardId] = useState(null);
 
+  // La rotella di caricamento compare solo alla prima apertura della pagina (loading parte già
+  // a true). Gli aggiornamenti successivi avvengono "in silenzio": se la pagina tornasse in
+  // caricamento, chiuderebbe le finestre aperte (es. il modulo appuntamento aperto dall'Esito).
   async function loadFollowUps() {
-    setLoading(true);
     setError(null);
     const { data, error: err } = await supabase
       .from("follow_ups")
@@ -73,7 +87,7 @@ export default function FollowUp() {
     const id = searchParams.get("esito");
     if (!id || loading) return;
     const f = followUps.find((x) => x.id === id);
-    if (f) setOutcomeFollowUp(f);
+    if (f) openOutcome(f);
     setSearchParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, loading, followUps]);
@@ -205,7 +219,8 @@ export default function FollowUp() {
         onOpen={openEdit}
         onToggle={toggleComplete}
         onEmail={openEmailDraft}
-        onOutcome={setOutcomeFollowUp}
+        onOutcome={openOutcome}
+        onAppointment={openAppointment}
         onContact={setContactCardId}
       />
       <FollowUpGroup
@@ -215,7 +230,8 @@ export default function FollowUp() {
         onOpen={openEdit}
         onToggle={toggleComplete}
         onEmail={openEmailDraft}
-        onOutcome={setOutcomeFollowUp}
+        onOutcome={openOutcome}
+        onAppointment={openAppointment}
         onContact={setContactCardId}
       />
       <FollowUpGroup
@@ -225,7 +241,8 @@ export default function FollowUp() {
         onOpen={openEdit}
         onToggle={toggleComplete}
         onEmail={openEmailDraft}
-        onOutcome={setOutcomeFollowUp}
+        onOutcome={openOutcome}
+        onAppointment={openAppointment}
         onContact={setContactCardId}
       />
 
@@ -245,7 +262,8 @@ export default function FollowUp() {
               onOpen={openEdit}
               onToggle={toggleComplete}
               onEmail={openEmailDraft}
-              onOutcome={setOutcomeFollowUp}
+              onOutcome={openOutcome}
+        onAppointment={openAppointment}
               onContact={setContactCardId}
             />
           </div>
@@ -268,8 +286,13 @@ export default function FollowUp() {
 
       {outcomeFollowUp && (
         <FollowUpOutcome
+          key={outcomeFollowUp.id + (outcomeMode || "")}
           followUp={outcomeFollowUp}
-          onClose={() => setOutcomeFollowUp(null)}
+          initialNextStep={outcomeMode}
+          onClose={() => {
+            setOutcomeFollowUp(null);
+            setOutcomeMode(null);
+          }}
           onSaved={loadFollowUps}
         />
       )}
@@ -293,7 +316,7 @@ const TONE_STYLES = {
   muted: "border-l-slate-200 opacity-60",
 };
 
-function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail, onOutcome, onContact }) {
+function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail, onOutcome, onAppointment, onContact }) {
   if (items.length === 0 && title) return null;
   return (
     <div>
@@ -376,6 +399,16 @@ function FollowUpGroup({ title, items, tone, onOpen, onToggle, onEmail, onOutcom
                 title="Registra l'esito della chiamata"
               >
                 <ClipboardCheck size={13} /> Esito
+              </button>
+            )}
+            {f.status === "aperto" && (
+              <button
+                type="button"
+                onClick={() => onAppointment(f)}
+                className="flex items-center gap-1 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1.5 rounded-lg flex-shrink-0"
+                title="Il cliente ha accettato: fissa subito l'appuntamento da qui"
+              >
+                <CalendarPlus size={13} /> Appuntamento
               </button>
             )}
             {f.contacts?.email && f.status === "aperto" && (
