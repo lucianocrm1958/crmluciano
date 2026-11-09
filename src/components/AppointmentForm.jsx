@@ -32,7 +32,11 @@ function buildEmailLink(email) {
 export default function AppointmentForm({
   appointment,
   presetContact,
+  presetOperatorId,
   initialDate,
+  // Chiamata solo quando l'appuntamento viene davvero salvato (non quando cambia la scheda
+  // cliente aperta da qui), con l'id dell'appuntamento. Usata dall'Esito dei Follow-up.
+  onAppointmentSaved,
   hideContactLink = false,
   onClose,
   onSaved,
@@ -81,7 +85,7 @@ export default function AppointmentForm({
   const [civico, setCivico] = useState(() => splitAddress(appointment?.address).civico);
   const [status, setStatus] = useState(appointment?.status || "programmato");
   const [outcomeNotes, setOutcomeNotes] = useState(appointment?.outcome_notes || "");
-  const [operatorId, setOperatorId] = useState(appointment?.operator_id || "");
+  const [operatorId, setOperatorId] = useState(appointment?.operator_id || presetOperatorId || "");
   const [callOutcomeId, setCallOutcomeId] = useState(appointment?.call_outcome_id || "");
   const [result, setResult] = useState(appointment?.result || "");
   // Esito positivo: una riga per ogni prodotto venduto in questo appuntamento (es. cliente
@@ -574,6 +578,7 @@ export default function AppointmentForm({
         await savePendingDeal();
       }
 
+      onAppointmentSaved?.(appointmentId);
       onSaved?.();
       onClose();
     } catch (err) {
@@ -1370,4 +1375,3 @@ function splitAddress(fullAddress) {
   }
   return { street: value, civico: "" };
 }
-
