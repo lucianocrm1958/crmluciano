@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import { logActivity } from "../lib/activityLog";
@@ -13,7 +13,9 @@ import { Loader2 } from "lucide-react";
 //  - nel diario note del contatto viene aggiunta una riga datata con esito, nota e operatore;
 //  - il follow-up viene segnato come completato;
 //  - a scelta: si crea un nuovo follow-up per richiamare, oppure si apre subito il modulo
-//    per fissare l'appuntamento con il contatto già selezionato.
+//    per fissare l'appuntamento con contatto e operatore già selezionati; in questo caso
+//    l'esito viene registrato solo al salvataggio dell'appuntamento e il contatto passa
+//    alla fase "Appuntamento fissato".
 
 function tomorrow() {
   const d = new Date();
@@ -30,20 +32,28 @@ function suggestNextStep(outcomeName) {
   return "chiudi";
 }
 
-export default function FollowUpOutcome({ followUp, onClose, onSaved }) {
+export default function FollowUpOutcome({ followUp, initialNextStep, onClose, onSaved }) {
   const { callOutcomes, operators, pipelineStages } = useSettings();
   const contact = followUp.contacts || {};
 
-  const [outcomeId, setOutcomeId] = useState("");
+  // Pulsante "Appuntamento" del follow-up: esito "appuntamento fissato" già scelto
+  // (se esiste in Impostazioni → Esiti chiamata) e modulo appuntamento aperto subito.
+  const quickAppointment = initialNextStep === "appuntamento";
+  const presetOutcomeId = quickAppointment
+    ? callOutcomes.find((o) => suggestNextStep(o.name) === "appuntamento")?.id || ""
+    : "";
+
+  const [outcomeId, setOutcomeId] = useState(presetOutcomeId);
   const [operatorId, setOperatorId] = useState(followUp.operator_id || "");
   const [note, setNote] = useState("");
-  const [nextStep, setNextStep] = useState("chiudi");
+  const [nextStep, setNextStep] = useState(quickAppointment ? "appuntamento" : "chiudi");
   const [callbackDate, setCallbackDate] = useState(tomorrow());
   const [callbackTime, setCallbackTime] = useState("");
   const [callbackNote, setCallbackNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [appointmentOpen, setAppointmentOpen] = useState(false);
+  const [appointmentOpen, setAppointmentOpen] = useState(quickAppointment && !!presetOutcomeId);
+  const appointmentSavedRef = useRef(false);
 
   // Monitoraggio: registra l'apertura dell'esito follow-up (chi, quando, quale contatto).
   useEffect(() => {
@@ -57,78 +67,98 @@ export default function FollowUpOutcome({ followUp, onClose, onSaved }) {
     setNextStep(suggestNextStep(name));
   }
 
-  async function handleSave() {
+  function validate() {
     if (!outcomeId) {
       setError("Scegli l'esito della chiamata.");
-      return;
+      return false;
     }
     if (nextStep === "richiama" && !callbackDate) {
       setError("Indica il giorno in cui richiamare.");
-      return;
+      return false;
     }
-    setSaving(true);
-    setError(null);
+    return true;
+  }
 
+  // Scrive esito, nota nel diario e chiusura del follow-up (più l'eventuale richiamo).
+  // Se è stato appena fissato un appuntamento, il contatto passa anche alla fase
+  // "Appuntamento fissato" (solo se era ancora in una fase iniziale).
+  async function writeOutcome({ appointmentFixed = false } = {}) {
     const outcomeName = callOutcomes.find((o) => o.id === outcomeId)?.name || "";
 
-    try {
-      // 1. Esito sul contatto. Come nella scheda contatto: se il contatto non ha ancora una
-      //    fase o è in "Nuovo contatto", passa a "Chiamata TMK".
-      const contactUpdate = { call_outcome_id: outcomeId, updated_at: new Date().toISOString() };
-      const tmkStage = pipelineStages.find((s) => /tmk/i.test(s.name));
-      const newStage = pipelineStages.find((s) => /nuovo/i.test(s.name));
-      const currentStage = contact.pipeline_stage_id || null;
-      const isEarly = !currentStage || (newStage && currentStage === newStage.id);
-      if (tmkStage && isEarly) contactUpdate.pipeline_stage_id = tmkStage.id;
+    // 1. Esito sul contatto. Come nella scheda contatto: se il contatto non ha ancora una
+    //    fase o è in "Nuovo contatto", passa a "Chiamata TMK".
+    const contactUpdate = { call_outcome_id: outcomeId, updated_at: new Date().toISOString() };
+    const tmkStage = pipelineStages.find((s) => /tmk/i.test(s.name));
+    const newStage = pipelineStages.find((s) => /nuovo/i.test(s.name));
+    const apptStage = pipelineStages.find((s) => /appuntament/i.test(s.name));
+    const currentStage = contact.pipeline_stage_id || null;
+    const isEarly = !currentStage || (newStage && currentStage === newStage.id);
+    const isBeforeAppointment = isEarly || (tmkStage && currentStage === tmkStage.id);
+    if (appointmentFixed && apptStage && isBeforeAppointment) {
+      contactUpdate.pipeline_stage_id = apptStage.id;
+    } else if (tmkStage && isEarly) {
+      contactUpdate.pipeline_stage_id = tmkStage.id;
+    }
 
-      // 2. Riga nel diario note del contatto.
-      let body = `Esito chiamata: ${outcomeName}`;
-      if (note.trim()) body += ` — ${note.trim()}`;
-      if (nextStep === "richiama") {
-        const [y, m, d] = callbackDate.split("-");
-        body += ` (da richiamare il ${d}/${m}/${y}${callbackTime ? ` alle ${callbackTime}` : ""})`;
-      }
+    // 2. Riga nel diario note del contatto.
+    let body = `Esito chiamata: ${outcomeName}`;
+    if (note.trim()) body += ` — ${note.trim()}`;
+    if (nextStep === "richiama") {
+      const [y, m, d] = callbackDate.split("-");
+      body += ` (da richiamare il ${d}/${m}/${y}${callbackTime ? ` alle ${callbackTime}` : ""})`;
+    }
+    if (appointmentFixed) body += " (appuntamento fissato dal follow-up)";
 
-      // Le scritture sono indipendenti tra loro: vengono inviate tutte insieme
-      // invece che una dopo l'altra, così il salvataggio è molto più rapido.
-      const writes = [
-        supabase.from("contacts").update(contactUpdate).eq("id", followUp.contact_id),
-        supabase.from("contact_notes").insert({
+    // Le scritture sono indipendenti tra loro: vengono inviate tutte insieme.
+    const writes = [
+      supabase.from("contacts").update(contactUpdate).eq("id", followUp.contact_id),
+      supabase.from("contact_notes").insert({
+        contact_id: followUp.contact_id,
+        body,
+        operator_id: operatorId || null,
+        source: "followup",
+      }),
+      // 3. Il follow-up chiamato è fatto.
+      supabase.from("follow_ups").update({ status: "completato" }).eq("id", followUp.id),
+    ];
+    // 4. Eventuale nuovo follow-up per richiamare.
+    if (nextStep === "richiama") {
+      writes.push(
+        supabase.from("follow_ups").insert({
           contact_id: followUp.contact_id,
-          body,
+          due_date: callbackDate,
+          due_time: callbackTime || null,
+          note: callbackNote.trim() || `Richiamare (${outcomeName})`,
+          status: "aperto",
           operator_id: operatorId || null,
-          source: "followup",
-        }),
-        // 3. Il follow-up chiamato è fatto.
-        supabase.from("follow_ups").update({ status: "completato" }).eq("id", followUp.id),
-      ];
-      // 4. Eventuale nuovo follow-up per richiamare.
-      if (nextStep === "richiama") {
-        writes.push(
-          supabase.from("follow_ups").insert({
-            contact_id: followUp.contact_id,
-            due_date: callbackDate,
-            due_time: callbackTime || null,
-            note: callbackNote.trim() || `Richiamare (${outcomeName})`,
-            status: "aperto",
-            operator_id: operatorId || null,
-          })
-        );
-      }
-      const results = await Promise.all(writes);
-      const failed = results.find((r) => r.error);
-      if (failed) throw failed.error;
+        })
+      );
+    }
+    const results = await Promise.all(writes);
+    const failed = results.find((r) => r.error);
+    if (failed) throw failed.error;
+    window.dispatchEvent(new Event("followup-alerts-refresh"));
+  }
 
+  async function handleSave() {
+    if (!validate()) return;
+    setError(null);
+
+    // Appuntamento: si apre SUBITO il modulo con contatto e operatore già compilati.
+    // Esito e chiusura del follow-up vengono salvati solo quando l'appuntamento è salvato;
+    // se l'operatrice annulla, torna qui senza che nulla sia stato registrato.
+    if (nextStep === "appuntamento") {
+      appointmentSavedRef.current = false;
+      setAppointmentOpen(true);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await writeOutcome();
       setSaving(false);
       onSaved?.();
-      window.dispatchEvent(new Event("followup-alerts-refresh"));
-
-      // 5. Appuntamento: si apre il modulo con il contatto già selezionato.
-      if (nextStep === "appuntamento") {
-        setAppointmentOpen(true);
-      } else {
-        onClose();
-      }
+      onClose();
     } catch (err) {
       console.error(err);
       setSaving(false);
@@ -136,14 +166,35 @@ export default function FollowUpOutcome({ followUp, onClose, onSaved }) {
     }
   }
 
+  async function handleAppointmentSaved() {
+    appointmentSavedRef.current = true;
+    try {
+      await writeOutcome({ appointmentFixed: true });
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      // L'appuntamento è salvato; manca solo l'esito: si torna alla finestra dell'esito.
+      setAppointmentOpen(false);
+      setError(
+        "Appuntamento salvato, ma l'esito non è stato registrato: " +
+          (err.message || "errore sconosciuto") +
+          ". Riprova scegliendo \"Chiudi il follow-up\"."
+      );
+      setNextStep("chiudi");
+    }
+  }
+
   if (appointmentOpen) {
     return (
       <AppointmentForm
         presetContact={{ id: followUp.contact_id, ...contact }}
-        onClose={onClose}
-        onSaved={() => {
-          onSaved?.();
-          onClose();
+        presetOperatorId={operatorId || undefined}
+        onAppointmentSaved={handleAppointmentSaved}
+        onClose={() => {
+          // Dopo il salvataggio la chiusura la gestisce handleAppointmentSaved;
+          // con "Annulla" si torna all'esito, con i dati già scelti.
+          if (!appointmentSavedRef.current) setAppointmentOpen(false);
         }}
       />
     );
@@ -171,7 +222,7 @@ export default function FollowUpOutcome({ followUp, onClose, onSaved }) {
             className="flex items-center gap-1.5 bg-navy-600 hover:bg-navy-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg"
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
-            {nextStep === "appuntamento" ? "Salva e fissa appuntamento" : "Salva esito"}
+            {nextStep === "appuntamento" ? "Continua: fissa appuntamento" : "Salva esito"}
           </button>
         </div>
       }
