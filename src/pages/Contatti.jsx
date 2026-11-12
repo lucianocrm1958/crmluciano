@@ -26,6 +26,35 @@ function earliestCallbacks(rows) {
   return map;
 }
 
+// Appuntamento programmato più vicino per ogni contatto.
+function earliestAppointments(rows) {
+  const map = {};
+  for (const a of rows || []) {
+    if (!a.contact_id || !a.appointment_date) continue;
+    const key = `${a.appointment_date} ${a.appointment_time || "99:99"}`;
+    const prev = map[a.contact_id];
+    if (!prev || key < prev.key)
+      map[a.contact_id] = { key, date: a.appointment_date, time: a.appointment_time, mode: a.mode };
+  }
+  return map;
+}
+
+function todayIsoDate() {
+  const t = new Date();
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
+function appointmentLabel(ap) {
+  const [y, m, d] = ap.date.split("-");
+  const todayIso = todayIsoDate();
+  const when = ap.date === todayIso ? "oggi" : `${d}/${m}/${y}`;
+  const mode = ap.mode === "online" ? " (online)" : ap.mode === "presenza" ? " (in presenza)" : "";
+  const text = `Appuntamento ${when}${ap.time ? ` alle ${ap.time.slice(0, 5)}` : ""}${mode}`;
+  if (ap.date < todayIso) return { text: `${text} – da esitare`, tone: "bg-rose-50 text-rose-600" };
+  if (ap.date === todayIso) return { text, tone: "bg-emerald-50 text-emerald-700" };
+  return { text, tone: "bg-violet-50 text-violet-700" };
+}
+
 function callbackLabel(cb) {
   const [y, m, d] = cb.date.split("-");
   const today = new Date();
@@ -47,6 +76,7 @@ export default function Contatti() {
 
   const [contacts, setContacts] = useState([]);
   const [callbacks, setCallbacks] = useState({});
+  const [appointments, setAppointments] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -116,6 +146,46 @@ export default function Contatti() {
     setCallbacks(earliestCallbacks(all));
   }
 
+  // Legge gli appuntamenti ancora programmati (non ancora esitati).
+  async function loadAppointments() {
+    const PAGE = 1000;
+    let all = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error: err } = await supabase
+        .from("appointments")
+        .select("contact_id, appointment_date, appointment_time, mode")
+        .eq("status", "programmato")
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (err) {
+        console.error(err);
+        return;
+      }
+      all = all.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
+    setAppointments(earliestAppointments(all));
+  }
+
+  async function refreshAppointment(id) {
+    const { data, error: err } = await supabase
+      .from("appointments")
+      .select("contact_id, appointment_date, appointment_time, mode")
+      .eq("status", "programmato")
+      .eq("contact_id", id);
+    if (err) {
+      console.error(err);
+      return;
+    }
+    const found = earliestAppointments(data)[id];
+    setAppointments((prev) => {
+      const next = { ...prev };
+      if (found) next[id] = found;
+      else delete next[id];
+      return next;
+    });
+  }
+
   async function refreshCallback(id) {
     const { data, error: err } = await supabase
       .from("follow_ups")
@@ -138,6 +208,7 @@ export default function Contatti() {
   useEffect(() => {
     loadContacts();
     loadCallbacks();
+    loadAppointments();
   }, []);
 
   // Dopo il salvataggio di una scheda rilegge SOLO quel contatto, invece di
@@ -145,9 +216,11 @@ export default function Contatti() {
   async function refreshContact(id) {
     if (!id) {
       loadCallbacks();
+      loadAppointments();
       return loadContacts();
     }
     refreshCallback(id);
+    refreshAppointment(id);
     const { data, error: err } = await supabase.from("contacts").select(CONTACT_FIELDS).eq("id", id).maybeSingle();
     if (err) {
       console.error(err);
@@ -355,13 +428,19 @@ export default function Contatti() {
                       {c.operators?.initials}
                     </p>
                   )}
-                  {(c.call_outcomes?.name || callbacks[c.id]) && (
+                  {(c.call_outcomes?.name || callbacks[c.id] || appointments[c.id]) && (
                     <p className="text-[11px] mt-0.5 flex flex-wrap items-center gap-1">
                       {c.call_outcomes?.name && <span className="text-amber-600">{c.call_outcomes.name}</span>}
                       {callbacks[c.id] && (() => {
                         const cb = callbackLabel(callbacks[c.id]);
                         return (
                           <span className={`inline-block px-1.5 py-0.5 rounded font-medium ${cb.tone}`}>{cb.text}</span>
+                        );
+                      })()}
+                      {appointments[c.id] && (() => {
+                        const ap = appointmentLabel(appointments[c.id]);
+                        return (
+                          <span className={`inline-block px-1.5 py-0.5 rounded font-medium ${ap.tone}`}>{ap.text}</span>
                         );
                       })()}
                     </p>
@@ -440,5 +519,3 @@ export default function Contatti() {
     </div>
   );
 }
-
-
