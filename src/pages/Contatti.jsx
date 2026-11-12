@@ -14,11 +14,39 @@ const CONTACT_FIELDS =
 // rende la pagina lenta e ritarda l'apertura delle schede.
 const ROWS_STEP = 100;
 
+// Richiamo aperto più vicino per ogni contatto (dai Follow-up), da mostrare in elenco.
+function earliestCallbacks(rows) {
+  const map = {};
+  for (const f of rows || []) {
+    if (!f.contact_id || !f.due_date) continue;
+    const key = `${f.due_date} ${f.due_time || "99:99"}`;
+    const prev = map[f.contact_id];
+    if (!prev || key < prev.key) map[f.contact_id] = { key, date: f.due_date, time: f.due_time };
+  }
+  return map;
+}
+
+function callbackLabel(cb) {
+  const [y, m, d] = cb.date.split("-");
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const when = cb.date === todayIso ? "oggi" : `${d}/${m}/${y}`;
+  const text = `Richiamo ${when}${cb.time ? ` alle ${cb.time.slice(0, 5)}` : ""}`;
+  const tone =
+    cb.date < todayIso
+      ? "bg-rose-50 text-rose-600"
+      : cb.date === todayIso
+        ? "bg-emerald-50 text-emerald-700"
+        : "bg-navy-50 text-navy-600";
+  return { text: cb.date < todayIso ? `${text} (scaduto)` : text, tone };
+}
+
 export default function Contatti() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { professionalCategories, leadSources, pipelineStages, operators, callOutcomes } = useSettings();
 
   const [contacts, setContacts] = useState([]);
+  const [callbacks, setCallbacks] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -67,14 +95,59 @@ export default function Contatti() {
     setLoading(false);
   }
 
+  // Legge i follow-up ancora aperti (anche oltre 1000, pagina per pagina).
+  async function loadCallbacks() {
+    const PAGE = 1000;
+    let all = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error: err } = await supabase
+        .from("follow_ups")
+        .select("contact_id, due_date, due_time")
+        .eq("status", "aperto")
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (err) {
+        console.error(err);
+        return;
+      }
+      all = all.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
+    setCallbacks(earliestCallbacks(all));
+  }
+
+  async function refreshCallback(id) {
+    const { data, error: err } = await supabase
+      .from("follow_ups")
+      .select("contact_id, due_date, due_time")
+      .eq("status", "aperto")
+      .eq("contact_id", id);
+    if (err) {
+      console.error(err);
+      return;
+    }
+    const found = earliestCallbacks(data)[id];
+    setCallbacks((prev) => {
+      const next = { ...prev };
+      if (found) next[id] = found;
+      else delete next[id];
+      return next;
+    });
+  }
+
   useEffect(() => {
     loadContacts();
+    loadCallbacks();
   }, []);
 
   // Dopo il salvataggio di una scheda rilegge SOLO quel contatto, invece di
   // ricaricare dal database l'intero elenco (migliaia di righe) a ogni chiamata.
   async function refreshContact(id) {
-    if (!id) return loadContacts();
+    if (!id) {
+      loadCallbacks();
+      return loadContacts();
+    }
+    refreshCallback(id);
     const { data, error: err } = await supabase.from("contacts").select(CONTACT_FIELDS).eq("id", id).maybeSingle();
     if (err) {
       console.error(err);
@@ -282,8 +355,16 @@ export default function Contatti() {
                       {c.operators?.initials}
                     </p>
                   )}
-                  {c.call_outcomes?.name && (
-                    <p className="text-[11px] text-amber-600 mt-0.5">{c.call_outcomes.name}</p>
+                  {(c.call_outcomes?.name || callbacks[c.id]) && (
+                    <p className="text-[11px] mt-0.5 flex flex-wrap items-center gap-1">
+                      {c.call_outcomes?.name && <span className="text-amber-600">{c.call_outcomes.name}</span>}
+                      {callbacks[c.id] && (() => {
+                        const cb = callbackLabel(callbacks[c.id]);
+                        return (
+                          <span className={`inline-block px-1.5 py-0.5 rounded font-medium ${cb.tone}`}>{cb.text}</span>
+                        );
+                      })()}
+                    </p>
                   )}
                 </div>
                 <div className="text-xs text-slate-500 space-y-0.5">
