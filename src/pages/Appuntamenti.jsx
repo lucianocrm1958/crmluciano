@@ -232,6 +232,17 @@ export default function Appuntamenti() {
             </button>
           </div>
 
+          <div className="flex items-center gap-4 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1 h-3.5 rounded-sm bg-navy-500"></span>
+              <MapPin size={12} /> In presenza
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1 h-3.5 rounded-sm bg-violet-400"></span>
+              <Video size={12} /> Online
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
             {weekDays.map((day, i) => {
               const dayAppointments = appointmentsForDay(day);
@@ -283,10 +294,16 @@ export default function Appuntamenti() {
                       <button
                         key={a.id}
                         onClick={() => openEdit(a)}
-                        className={`w-full text-left rounded-md px-2 py-1.5 text-xs ${STATUS_COLORS[a.status]}`}
+                        title={a.mode === "online" ? "Online" : a.address || "In presenza"}
+                        className={`w-full text-left rounded-md px-2 py-1.5 text-xs border-l-4 ${
+                          a.mode === "online" ? "border-violet-400" : "border-navy-500"
+                        } ${STATUS_COLORS[a.status]}`}
                       >
                         <p className="font-medium flex items-center justify-between">
-                          <span>{a.appointment_time?.slice(0, 5)}</span>
+                          <span className="flex items-center gap-1">
+                            {a.mode === "online" ? <Video size={11} /> : <MapPin size={11} />}
+                            {a.appointment_time?.slice(0, 5)}
+                          </span>
                           {a.operators?.initials && (
                             <span className="text-[9px] bg-white/60 rounded px-1">{a.operators.initials}</span>
                           )}
@@ -387,3 +404,4 @@ function AppointmentList({ items, onOpen }) {
     </div>
   );
 }
+
