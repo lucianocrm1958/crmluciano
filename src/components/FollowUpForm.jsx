@@ -103,6 +103,14 @@ export default function FollowUpForm({ followUp, presetContact, onClose, onSaved
         const { error: err } = await supabase.from("follow_ups").update(payload).eq("id", followUp.id);
         if (err) throw err;
       } else {
+        // Un nuovo richiamo sostituisce quelli ancora aperti per lo stesso contatto:
+        // i vecchi vengono segnati come completati (restano nello storico).
+        const { error: closeErr } = await supabase
+          .from("follow_ups")
+          .update({ status: "completato" })
+          .eq("contact_id", selectedContact.id)
+          .eq("status", "aperto");
+        if (closeErr) throw closeErr;
         const { error: err } = await supabase.from("follow_ups").insert(payload);
         if (err) throw err;
       }
