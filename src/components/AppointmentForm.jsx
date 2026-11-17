@@ -353,6 +353,14 @@ export default function AppointmentForm({
     if (cErr) throw cErr;
 
     if (pendingFuDate) {
+      // Un nuovo richiamo sostituisce quelli ancora aperti per lo stesso contatto:
+      // i vecchi vengono segnati come completati (restano nello storico).
+      const { error: closeErr } = await supabase
+        .from("follow_ups")
+        .update({ status: "completato" })
+        .eq("contact_id", selectedContact.id)
+        .eq("status", "aperto");
+      if (closeErr) throw closeErr;
       const { error: fErr } = await supabase.from("follow_ups").insert({
         contact_id: selectedContact.id,
         due_date: pendingFuDate,
