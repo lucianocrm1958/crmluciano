@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, Loader2, Phone, Mail, Building2, Upload } from "lucide-react";
+import { Plus, Loader2, Phone, Mail, Building2, Upload, History } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import ContactForm from "../components/ContactForm";
 import ImportContacts from "../components/ImportContacts";
 import { formatCurrency } from "../lib/format";
+import { buildIndex, findMatches } from "../lib/duplicates";
 
 const CONTACT_FIELDS =
   "id, first_name, last_name, company, phone, landline_phone, email, address, city, notes, status, estimated_value, professional_category_id, lead_source_id, pipeline_stage_id, list_name, operator_id, call_outcome_id, professional_categories(name), lead_sources(name), pipeline_stages(name, color), operators(initials), call_outcomes(name)";
@@ -88,6 +89,7 @@ export default function Contatti() {
   const [filterOperator, setFilterOperator] = useState("");
   const [filterList, setFilterList] = useState("");
   const [filterCallOutcome, setFilterCallOutcome] = useState("");
+  const [filterRepeat, setFilterRepeat] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
@@ -257,6 +259,22 @@ export default function Contatti() {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [contacts]);
 
+  // Per ogni contatto, le altre liste/eventi in cui la stessa persona è già presente
+  // (stessa email, stesso telefono o stesso nome e cognome).
+  const otherLists = useMemo(() => {
+    const index = buildIndex(contacts);
+    const map = {};
+    for (const c of contacts) {
+      const matches = findMatches(c, index);
+      if (matches.length)
+        map[c.id] = {
+          count: matches.length,
+          lists: Array.from(new Set(matches.map((m) => m.contact.list_name || "senza lista"))),
+        };
+    }
+    return map;
+  }, [contacts]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return contacts.filter((c) => {
@@ -268,6 +286,7 @@ export default function Contatti() {
       } else if (filterStage && c.pipeline_stage_id !== filterStage) return false;
       if (filterOperator && c.operator_id !== filterOperator) return false;
       if (filterList && c.list_name !== filterList) return false;
+      if (filterRepeat && !otherLists[c.id]) return false;
       if (filterCallOutcome === "__none__") {
         if (c.call_outcome_id) return false;
       } else if (filterCallOutcome && c.call_outcome_id !== filterCallOutcome) return false;
@@ -280,11 +299,11 @@ export default function Contatti() {
       }
       return true;
     });
-  }, [contacts, search, filterCategory, filterSource, filterStage, filterStatus, filterOperator, filterList, filterCallOutcome]);
+  }, [contacts, search, filterCategory, filterSource, filterStage, filterStatus, filterOperator, filterList, filterCallOutcome, filterRepeat, otherLists]);
 
   useEffect(() => {
     setVisibleCount(ROWS_STEP);
-  }, [search, filterCategory, filterSource, filterStage, filterStatus, filterOperator, filterList, filterCallOutcome]);
+  }, [search, filterCategory, filterSource, filterStage, filterStatus, filterOperator, filterList, filterCallOutcome, filterRepeat]);
 
   const visible = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
@@ -383,6 +402,10 @@ export default function Contatti() {
             </option>
           ))}
         </select>
+        <label className="flex items-center gap-1.5 text-sm text-slate-600 px-1">
+          <input type="checkbox" checked={filterRepeat} onChange={(e) => setFilterRepeat(e.target.checked)} />
+          Già presenti in altri eventi
+        </label>
       </div>
 
       {loading ? (
@@ -426,6 +449,19 @@ export default function Contatti() {
                       {c.list_name}
                       {c.list_name && c.operators?.initials ? " · " : ""}
                       {c.operators?.initials}
+                    </p>
+                  )}
+                  {otherLists[c.id] && (
+                    <p
+                      className="text-[11px] mt-0.5"
+                      title={"Presente anche in: " + otherLists[c.id].lists.join(", ")}
+                    >
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-violet-50 text-violet-700">
+                        <History size={11} />
+                        {otherLists[c.id].count === 1
+                          ? "Già presente in 1 altro evento"
+                          : `Già presente in ${otherLists[c.id].count} altri eventi`}
+                      </span>
                     </p>
                   )}
                   {(c.call_outcomes?.name || callbacks[c.id] || appointments[c.id]) && (
