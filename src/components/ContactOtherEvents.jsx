@@ -8,13 +8,15 @@ import ContactCardModal from "./ContactCardModal";
 // con altre schede (es. partecipante a un webinar precedente, a un altro convegno),
 // indicando lista/evento, data di caricamento, operatore, fase ed esito.
 // Da qui si può aprire la scheda dell'altro evento senza uscire.
-export default function ContactOtherEvents({ contact }) {
+// Con isNew (inserimento manuale di un nuovo contatto) il controllo avviene mentre si
+// scrivono nome, cognome, email e telefono, prima ancora di salvare.
+export default function ContactOtherEvents({ contact, isNew = false }) {
   const [matches, setMatches] = useState([]);
   const [open, setOpen] = useState(true);
   const [openId, setOpenId] = useState(null);
 
   useEffect(() => {
-    if (!contact?.id) return;
+    if (!contact?.id && !isNew) return;
     let cancelled = false;
     loadContactIndex()
       .then((index) => {
@@ -24,14 +26,14 @@ export default function ContactOtherEvents({ contact }) {
     return () => {
       cancelled = true;
     };
-  }, [contact]);
+  }, [contact, isNew]);
 
   if (matches.length === 0) return null;
 
   const lists = Array.from(new Set(matches.map((m) => m.contact.list_name || "senza lista")));
 
   return (
-    <div className="bg-violet-50 border border-violet-200 rounded-lg p-3">
+    <div className={`${isNew ? "bg-amber-50 border-amber-300" : "bg-violet-50 border-violet-200"} border rounded-lg p-3`}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -41,7 +43,9 @@ export default function ContactOtherEvents({ contact }) {
           <History size={16} className="flex-shrink-0 mt-0.5" />
           <span>
             <span className="font-semibold">
-              Già presente in {matches.length === 1 ? "un altro evento/lista" : `altri ${matches.length} eventi/liste`}
+              {isNew
+                ? `Attenzione: nominativo già presente nel CRM (${matches.length === 1 ? "1 scheda" : `${matches.length} schede`})`
+                : `Già presente in ${matches.length === 1 ? "un altro evento/lista" : `altri ${matches.length} eventi/liste`}`}
             </span>
             <span className="block text-xs text-violet-600">{lists.join(" · ")}</span>
           </span>
