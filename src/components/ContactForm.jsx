@@ -5,6 +5,7 @@ import ContactEmailLog from "./ContactEmailLog";
 import ContactNotesTimeline from "./ContactNotesTimeline";
 import ContactActivity from "./ContactActivity";
 import ContactOtherEvents from "./ContactOtherEvents";
+import { loadContactIndex, findMatches, invalidateContactIndex } from "../lib/duplicates";
 import { useSettings } from "../lib/useSettings";
 import { logActivity } from "../lib/activityLog";
 import { Loader2, Trash2 } from "lucide-react";
@@ -86,6 +87,23 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
   }, [contact?.id]);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Nuovo contatto inserito a mano: mentre si scrivono nome, cognome, email e telefono,
+  // dopo una breve pausa si controlla se il nominativo è già presente nel CRM.
+  const [dupProbe, setDupProbe] = useState(null);
+  useEffect(() => {
+    if (isEdit) return;
+    const t = setTimeout(() => {
+      setDupProbe({
+        first_name: form.first_name,
+        last_name: form.last_name,
+        email: form.email,
+        phone: form.phone,
+        landline_phone: form.landline_phone,
+      });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [isEdit, form.first_name, form.last_name, form.email, form.phone, form.landline_phone]);
   const [error, setError] = useState(null);
 
   function handleClose() {
@@ -152,6 +170,32 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
       setError("Seleziona un motivo per la trattativa persa.");
       return;
     }
+    // Ultimo controllo prima di creare un nuovo contatto: se è già nel CRM si chiede conferma.
+    if (!isEdit) {
+      try {
+        const index = await loadContactIndex();
+        const matches = findMatches(
+          {
+            first_name: form.first_name,
+            last_name: form.last_name,
+            email: form.email,
+            phone: form.phone,
+            landline_phone: form.landline_phone,
+          },
+          index
+        );
+        if (matches.length > 0) {
+          const lists = Array.from(new Set(matches.map((m) => m.contact.list_name || "senza lista"))).join(", ");
+          const ok = confirm(
+            `Questo nominativo risulta già presente nel CRM (${lists}).\n\nVuoi crearlo comunque come nuovo contatto?`
+          );
+          if (!ok) return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
     setSaving(true);
     setError(null);
 
@@ -193,6 +237,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
         if (err) throw err;
         contactId = inserted?.id || null;
       }
+      invalidateContactIndex();
 
       // Richiamo: se è indicata solo l'ora (senza data) il richiamo è per oggi.
       const callbackDay = callbackDate || (callbackTime ? new Date().toLocaleDateString("sv-SE") : "");
@@ -300,7 +345,7 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
           </div>
         )}
 
-        {isEdit && <ContactOtherEvents contact={contact} />}
+        {isEdit ? <ContactOtherEvents contact={contact} /> : dupProbe && <ContactOtherEvents contact={dupProbe} isNew />}
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nome *">
