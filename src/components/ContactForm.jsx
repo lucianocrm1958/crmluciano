@@ -4,6 +4,7 @@ import Modal from "./Modal";
 import ContactEmailLog from "./ContactEmailLog";
 import ContactNotesTimeline from "./ContactNotesTimeline";
 import ContactActivity from "./ContactActivity";
+import ContactOtherEvents from "./ContactOtherEvents";
 import { useSettings } from "../lib/useSettings";
 import { logActivity } from "../lib/activityLog";
 import { Loader2, Trash2 } from "lucide-react";
@@ -298,6 +299,8 @@ export default function ContactForm({ contact, onClose, onSaved, onDeleted }) {
             {error}
           </div>
         )}
+
+        {isEdit && <ContactOtherEvents contact={contact} />}
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nome *">
