@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useSettings } from "../lib/useSettings";
 import Modal from "./Modal";
-import { Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertTriangle } from "lucide-react";
+import { loadContactIndex, findMatches, invalidateContactIndex } from "../lib/duplicates";
+import { Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertTriangle, History } from "lucide-react";
 
 const TARGET_FIELDS = [
   { key: "first_name", label: "Nome", required: true },
@@ -60,6 +61,12 @@ export default function ImportContacts({ onClose, onImported }) {
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
 
+  // Contatti già presenti nel CRM (es. partecipanti a eventi precedenti).
+  const [dupIndex, setDupIndex] = useState(null);
+  const [dupLoading, setDupLoading] = useState(false);
+  const [skipDuplicates, setSkipDuplicates] = useState(false);
+  const [showDupDetails, setShowDupDetails] = useState(false);
+
   const [existingContacts, setExistingContacts] = useState([]);
   const [loadingExisting, setLoadingExisting] = useState(false);
 
@@ -86,6 +93,47 @@ export default function ImportContacts({ onClose, onImported }) {
       cancelled = true;
     };
   }, [mode, existingContacts.length]);
+
+  // In modalità "Carica nuovi contatti", appena il file è letto, carica l'elenco dei
+  // contatti già presenti per segnalare chi ha già partecipato ad altri eventi.
+  useEffect(() => {
+    if (mode !== "insert" || step !== 2 || dupIndex) return;
+    let cancelled = false;
+    setDupLoading(true);
+    loadContactIndex()
+      .then((index) => {
+        if (!cancelled) setDupIndex(index);
+      })
+      .catch((err) => console.error(err))
+      .finally(() => {
+        if (!cancelled) setDupLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, step, dupIndex]);
+
+  // Per ogni riga del file (con nome valido): le schede già presenti nel CRM.
+  const rowMatches = useMemo(() => {
+    if (!dupIndex || mode !== "insert") return [];
+    return rows.map((r) => {
+      const get = (key) => (mapping[key] !== undefined ? String(r[mapping[key]] || "").trim() : "");
+      if (!get("first_name")) return null;
+      const probe = {
+        first_name: get("first_name"),
+        last_name: get("last_name"),
+        email: get("email"),
+        phone: get("phone"),
+      };
+      const matches = findMatches(probe, dupIndex);
+      return matches.length ? { probe, matches, strong: matches.some((m) => m.strong) } : null;
+    });
+  }, [dupIndex, rows, mapping, mode]);
+
+  const dupRows = rowMatches.filter(Boolean);
+  const dupStrongCount = dupRows.filter((d) => d.strong).length;
+  const dupNameOnlyCount = dupRows.length - dupStrongCount;
+  const importCount = skipDuplicates ? Math.max(0, validRowCount() - dupStrongCount) : validRowCount();
 
   const existingListNames = Array.from(
     new Set(existingContacts.map((c) => c.list_name).filter(Boolean))
@@ -152,10 +200,10 @@ export default function ImportContacts({ onClose, onImported }) {
     return (dict[key] || []).some((k) => h.includes(k));
   }
 
-  const validRowCount = rows.filter((r) => {
+  function validRowCount() {
     const idx = mapping.first_name;
-    return idx !== undefined && String(r[idx] || "").trim() !== "";
-  }).length;
+    return rows.filter((r) => idx !== undefined && String(r[idx] || "").trim() !== "").length;
+  }
 
   async function handleImport() {
     if (mapping.first_name === undefined) {
@@ -182,7 +230,9 @@ export default function ImportContacts({ onClose, onImported }) {
     setError(null);
 
     const toInsert = rows
-      .map((r) => {
+      .map((r, rowIdx) => {
+        // Se richiesto, salta chi è già nel CRM con stessa email o stesso telefono.
+        if (skipDuplicates && rowMatches[rowIdx]?.strong) return null;
         const get = (key) => (mapping[key] !== undefined ? String(r[mapping[key]] || "").trim() : "");
         const firstName = get("first_name");
         if (!firstName) return null;
@@ -214,7 +264,14 @@ export default function ImportContacts({ onClose, onImported }) {
         if (err) throw err;
         inserted += chunk.length;
       }
-      setResult({ mode: "insert", inserted, total: toInsert.length });
+      invalidateContactIndex();
+      setResult({
+        mode: "insert",
+        inserted,
+        total: toInsert.length,
+        alreadyPresent: skipDuplicates ? dupNameOnlyCount : dupRows.length,
+        skipped: skipDuplicates ? dupStrongCount : 0,
+      });
       setStep(3);
       onImported?.();
     } catch (err) {
@@ -294,6 +351,7 @@ export default function ImportContacts({ onClose, onImported }) {
         });
       }
 
+      invalidateContactIndex();
       setResult({
         mode: "update",
         updated,
@@ -511,15 +569,80 @@ export default function ImportContacts({ onClose, onImported }) {
             </div>
           )}
 
+          {mode === "insert" && (
+            <div className="bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 text-sm text-violet-800 space-y-2">
+              {dupLoading || !dupIndex ? (
+                <p className="flex items-center gap-2 text-violet-600">
+                  <Loader2 size={14} className="animate-spin" /> Verifico chi è già presente nel CRM...
+                </p>
+              ) : dupRows.length === 0 ? (
+                <p className="flex items-center gap-2">
+                  <History size={16} /> Nessun contatto del file risulta già presente nel CRM.
+                </p>
+              ) : (
+                <>
+                  <p className="flex items-start gap-2">
+                    <History size={16} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      <span className="font-semibold">{dupRows.length} contatti del file sono già presenti nel CRM</span>{" "}
+                      (hanno partecipato ad altri eventi o sono in altre liste):
+                      {dupStrongCount > 0 && <> {dupStrongCount} con stessa email o telefono</>}
+                      {dupStrongCount > 0 && dupNameOnlyCount > 0 && ","}
+                      {dupNameOnlyCount > 0 && <> {dupNameOnlyCount} solo per nome e cognome (possibili omonimi)</>}.
+                      <span className="block text-xs text-violet-600 mt-0.5">
+                        Se li importi, nella loro scheda comparirà il riquadro "Già presente in altri eventi" con
+                        l'elenco delle liste precedenti.
+                      </span>
+                    </span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowDupDetails((v) => !v)}
+                    className="text-xs font-medium text-navy-600 hover:text-navy-700"
+                  >
+                    {showDupDetails ? "Nascondi elenco" : "Mostra elenco"}
+                  </button>
+                  {showDupDetails && (
+                    <div className="max-h-48 overflow-y-auto bg-white border border-violet-100 rounded-md divide-y divide-violet-50 text-xs text-slate-600">
+                      {dupRows.map((d, i) => (
+                        <div key={i} className="px-2.5 py-1.5">
+                          <span className="font-medium text-slate-800">
+                            {d.probe.first_name} {d.probe.last_name}
+                          </span>{" "}
+                          → {Array.from(new Set(d.matches.map((m) => m.contact.list_name || "senza lista"))).join(", ")}
+                          {!d.strong && <span className="text-amber-600"> (solo nome e cognome)</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {dupStrongCount > 0 && (
+                    <label className="flex items-start gap-2 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={skipDuplicates}
+                        onChange={(e) => setSkipDuplicates(e.target.checked)}
+                      />
+                      <span>
+                        Non importare i {dupStrongCount} contatti già presenti con stessa email o telefono (quelli
+                        abbinati solo per nome e cognome vengono comunque importati)
+                      </span>
+                    </label>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {mode === "insert" ? (
             <div className="bg-navy-50 text-navy-700 text-sm rounded-lg px-3 py-2 flex items-center gap-2">
               <CheckCircle2 size={16} />
-              {validRowCount} contatti verranno importati (righe con nome valido)
+              {importCount} contatti verranno importati (righe con nome valido)
             </div>
           ) : (
             <div className="bg-navy-50 text-navy-700 text-sm rounded-lg px-3 py-2 flex items-center gap-2">
               <CheckCircle2 size={16} />
-              {validRowCount} righe verranno elaborate per l'aggiornamento
+              {validRowCount()} righe verranno elaborate per l'aggiornamento
             </div>
           )}
 
@@ -532,7 +655,7 @@ export default function ImportContacts({ onClose, onImported }) {
             </button>
             <button
               onClick={handleImport}
-              disabled={importing || validRowCount === 0}
+              disabled={importing || (mode === "insert" ? importCount : validRowCount()) === 0}
               className="px-4 py-2 text-sm rounded-lg bg-navy-600 text-white hover:bg-navy-700 disabled:opacity-50 flex items-center gap-1.5"
             >
               {importing && <Loader2 size={14} className="animate-spin" />}
@@ -541,8 +664,8 @@ export default function ImportContacts({ onClose, onImported }) {
                   ? "Importazione..."
                   : "Aggiornamento..."
                 : mode === "insert"
-                ? `Importa ${validRowCount} contatti`
-                : `Aggiorna ${validRowCount} righe`}
+                ? `Importa ${importCount} contatti`
+                : `Aggiorna ${validRowCount()} righe`}
             </button>
           </div>
         </div>
@@ -555,6 +678,17 @@ export default function ImportContacts({ onClose, onImported }) {
           <p className="text-sm text-slate-500">
             {result.inserted} contatti su {result.total} sono stati aggiunti correttamente.
           </p>
+          {(result.alreadyPresent > 0 || result.skipped > 0) && (
+            <p className="text-sm text-violet-700 bg-violet-50 rounded-lg px-3 py-2 max-w-sm mx-auto">
+              {result.alreadyPresent > 0 && (
+                <>
+                  {result.alreadyPresent} di questi erano già presenti in altri eventi: lo vedrai nella loro scheda.
+                  <br />
+                </>
+              )}
+              {result.skipped > 0 && <>{result.skipped} contatti già presenti non sono stati importati.</>}
+            </p>
+          )}
           <button
             onClick={onClose}
             className="mt-4 px-4 py-2 text-sm rounded-lg bg-navy-600 text-white hover:bg-navy-700"
